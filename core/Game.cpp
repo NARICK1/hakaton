@@ -1435,14 +1435,14 @@ void Game::runDay8() {
     std::cout << BOX_V "  3. Усталость — ты выжат как лимон." << std::string(37, ' ') << BOX_V "\n";
     std::cout << BOX_V "  4. Пустоту — что дальше?" << std::string(44, ' ') << BOX_V "\n";
     std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
-    std::cout << BOX_V "  Ваш выбор [0-4]: ";
+    std::cout << BOX_V "  Ваш выбор [1-4]: ";
     std::cout << std::string(40, ' ') << BOX_V "\n";
     std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
 
     // Курсор уже в нужном месте после "Ваш выбор"
     std::cout << "\r                                                                                \r";
     std::cout << "  Ваш выбор: ";
-    int finalChoice = ConsoleUI::ReadInt();
+    int finalChoice = ConsoleUI::ReadInt("", 1, 4);
 
     if (finalChoice == 4 && state.getPlayer().getDebts() >= 3) {
         ConsoleUI::RenderScreen("ПУТЬ",
@@ -1945,7 +1945,7 @@ void Game::interactWithAlla() {
     std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
-    int choice = ConsoleUI::ReadInt();
+    int choice = ConsoleUI::ReadInt("", 0, static_cast<int>(choices.size()));
 
     if (choice > 0 && choice <= static_cast<int>(choices.size())) {
         const auto& selected = choices[choice - 1];
@@ -1978,7 +1978,7 @@ void Game::interactWithBulat() {
     std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
-    int choice = ConsoleUI::ReadInt();
+    int choice = ConsoleUI::ReadInt("", 0, static_cast<int>(choices.size()));
 
     if (choice > 0 && choice <= static_cast<int>(choices.size())) {
         const auto& selected = choices[choice - 1];
@@ -2004,7 +2004,7 @@ void Game::interactWithSemen() {
     std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
-    int choice = ConsoleUI::ReadInt();
+    int choice = ConsoleUI::ReadInt("", 0, static_cast<int>(choices.size()));
 
     if (choice > 0 && choice <= static_cast<int>(choices.size())) {
         const auto& selected = choices[choice - 1];
@@ -2030,7 +2030,7 @@ void Game::interactWithArtem() {
     std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
-    int choice = ConsoleUI::ReadInt();
+    int choice = ConsoleUI::ReadInt("", 0, static_cast<int>(choices.size()));
 
     if (choice > 0 && choice <= static_cast<int>(choices.size())) {
         const auto& selected = choices[choice - 1];

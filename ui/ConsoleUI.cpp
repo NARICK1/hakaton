@@ -121,6 +121,22 @@ void ConsoleUI::WaitForEnter() {
     std::getline(std::cin, dummy);
 }
 
+void ConsoleUI::SetPendingChoiceRange(int minValue, int maxValue) {
+    if (minValue > maxValue) {
+        std::swap(minValue, maxValue);
+    }
+
+    g_hasPendingChoiceRange = true;
+    g_pendingChoiceMin = minValue;
+    g_pendingChoiceMax = maxValue;
+}
+
+void ConsoleUI::ClearPendingChoiceRange() {
+    g_hasPendingChoiceRange = false;
+    g_pendingChoiceMin = 1;
+    g_pendingChoiceMax = 1;
+}
+
 int ConsoleUI::ReadInt(const std::string& prompt, int minValue, int maxValue) {
     bool defaultRange = isDefaultIntRange(minValue, maxValue);
     bool usePendingChoiceRange = g_hasPendingChoiceRange && defaultRange;
@@ -129,7 +145,7 @@ int ConsoleUI::ReadInt(const std::string& prompt, int minValue, int maxValue) {
         minValue = g_pendingChoiceMin;
         maxValue = g_pendingChoiceMax;
     } else if (!defaultRange) {
-        g_hasPendingChoiceRange = false;
+        ClearPendingChoiceRange();
     }
 
     while (true) {
@@ -152,7 +168,7 @@ int ConsoleUI::ReadInt(const std::string& prompt, int minValue, int maxValue) {
         if ((iss >> value) && !(iss >> extra)) {
             if (value >= minValue && value <= maxValue) {
                 if (usePendingChoiceRange) {
-                    g_hasPendingChoiceRange = false;
+                    ClearPendingChoiceRange();
                 }
 
                 return value;
@@ -272,11 +288,9 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
                               bool isEnding,
                               bool endingSuccess) {
     if (!choices.empty()) {
-        g_hasPendingChoiceRange = true;
-        g_pendingChoiceMin = 1;
-        g_pendingChoiceMax = static_cast<int>(choices.size());
+        SetPendingChoiceRange(1, static_cast<int>(choices.size()));
     } else {
-        g_hasPendingChoiceRange = false;
+        ClearPendingChoiceRange();
     }
 
     ClearScreen();
