@@ -1,5 +1,7 @@
 #pragma once
+
 #include "../player/Player.h"
+#include <string>
 
 class HungerSystem {
 public:
