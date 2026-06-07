@@ -1,5 +1,6 @@
 #include "SaveManager.h"
 #include "../player/Player.h"
+#include "../data/Lang.h"
 #include <fstream>
 #include <iostream>
 
@@ -8,7 +9,7 @@ const std::string SaveManager::SAVE_FILE = "savegame.dat";
 bool SaveManager::SaveGame(const GameState& state) {
     std::ofstream file(SAVE_FILE, std::ios::binary);
     if (!file.is_open()) {
-        std::cerr << "Ошибка: не удалось открыть файл для сохранения.\n";
+        std::cerr << Lang::get("save_error_open") << "\n";
         return false;
     }
 
@@ -18,14 +19,14 @@ bool SaveManager::SaveGame(const GameState& state) {
     file.write(data.c_str(), size);
 
     file.close();
-    std::cout << "Игра сохранена.\n";
+    std::cout << Lang::get("ui_saved") << "\n";
     return true;
 }
 
 bool SaveManager::LoadGame(GameState& state) {
     std::ifstream file(SAVE_FILE, std::ios::binary);
     if (!file.is_open()) {
-        std::cerr << "Сохранение не найдено.\n";
+        std::cerr << Lang::get("ui_save_not_found") << "\n";
         return false;
     }
 
@@ -37,11 +38,11 @@ bool SaveManager::LoadGame(GameState& state) {
     file.close();
 
     if (state.deserialize(data)) {
-        std::cout << "Игра загружена.\n";
+        std::cout << Lang::get("ui_loaded") << "\n";
         return true;
     }
 
-    std::cerr << "Ошибка загрузки сохранения.\n";
+    std::cerr << Lang::get("save_error_load") << "\n";
     return false;
 }
 

@@ -14,9 +14,11 @@ static void ensureInit() {
     _ru["menu_load_game"]    = "Загрузить игру";
     _ru["menu_controls"]     = "Управление";
     _ru["menu_settings"]     = "Настройки";
+    _ru["menu_debug"]        = "Режим разработчика";
+    _ru["menu_credits"]      = "Авторы проекта";
     _ru["menu_exit"]         = "Выход";
     _ru["menu_your_choice"]  = "Ваш выбор";
-    _ru["menu_restart"]      = "Начать сначала";
+    _ru["menu_restart"]      = "Начать заново";
     _ru["menu_back"]         = "Вернуться в меню";
     _ru["menu_lang"]         = "Язык интерфейса";
     _ru["menu_rus"]          = "Русский";
@@ -28,7 +30,7 @@ static void ensureInit() {
     _ru["menu_back_title"]   = "Назад";
     _ru["menu_title"]        = "БУДНИ СТУДЕНТА";
     _ru["menu_welcome"]      = "Добро пожаловать в Уфимский университет науки и технологий.";
-    _ru["menu_welcome2"]     = "Впереди первая сессия, новые знакомства, экзамены и решения,";
+    _ru["menu_welcome2"]     = "Первая сессия, новые знакомства, экзамены и выборы,";
     _ru["menu_welcome3"]     = "которые повлияют на всю историю.";
     _ru["menu_current"]      = "Текущий профиль";
     _ru["menu_lang_current"] = "Язык";
@@ -48,6 +50,8 @@ static void ensureInit() {
     _ru["ui_loaded"]         = "Сохранение загружено.";
     _ru["ui_invalid"]        = "Некорректный ввод.";
     _ru["ui_save_not_found"] = "Сохранение не найдено.";
+    _ru["save_error_open"]   = "Ошибка: не удалось открыть файл для сохранения.";
+    _ru["save_error_load"]   = "Ошибка загрузки сохранения.";
 
     _ru["as_alla"]           = "Алла";
     _ru["as_bulat"]          = "Булат";
@@ -118,11 +122,54 @@ static void ensureInit() {
     _ru["end_romantic_body"]= "Тимур и Алла — идеальная пара.\n\nВместе они сдали все экзамены.\nВместе строят планы на будущее.\n\nИ жили они долго и счастливо...\nНу, по крайней мере до следующей сессии.";
     _ru["end_army_body"]    = "Тимур решил, что учёба — не его.\nАрмия ждёт!\n\nДва года службы.\nНовые друзья, новые испытания.\n\nМожет быть, он вернётся доучиваться.\nА может, выберет другой путь.";
 
+    _ru["credits_title"]     = "АВТОРЫ ПРОЕКТА";
+    _ru["credits_stats"]     = "ИТОГИ ПРОХОЖДЕНИЯ";
+    _ru["credits_thanks"]    = "Спасибо за прохождение игры!";
+    _ru["credits_game_title"] = "Будни студента";
+    _ru["credits_team_title"] = "АВТОРЫ ПРОЕКТА — СТАТИСТИКА";
+    _ru["credits_team_size"] = "Команда";
+    _ru["credits_lang"]      = "Язык";
+    _ru["credits_libs"]      = "Библиотеки";
+    _ru["credits_none"]      = "отсутствуют";
+    _ru["credits_gfx"]       = "Графика";
+    _ru["credits_l10n"]      = "Локализация";
+    _ru["credits_profiles"]  = "Профили интерфейса";
+    _ru["credits_year"]      = "Год создания";
+    _ru["credits_days"]      = "Пройдено дней";
+    _ru["credits_exams"]     = "Сдано экзаменов";
+    _ru["credits_stress"]    = "Макс. стресс";
+    _ru["credits_money"]     = "Заработано";
+    _ru["credits_alla"]      = "Отношение Аллы";
+    _ru["credits_ending"]    = "Концовка";
+    _ru["credits_files"]     = "Файлов";
+    _ru["credits_lines"]     = "Строк кода";
+    _ru["credits_modules"]   = "Модулей";
+
+    _ru["sys_journal"]       = "Журнал событий";
+    _ru["sys_journal_empty"] = "Журнал пуст.";
+    _ru["sys_journal_title"] = "=== ЖУРНАЛ СОБЫТИЙ ===";
+    _ru["sys_encyclopedia"]  = "Энциклопедия";
+    _ru["sys_encyclopedia_title"] = "=== ЭНЦИКЛОПЕДИЯ NPC ===";
+    _ru["sys_achievements"]  = "Достижения";
+    _ru["sys_achievements_title"] = "=== ДОСТИЖЕНИЯ ===";
+    _ru["sys_habits"]        = "Привычки";
+    _ru["sys_habits_title"]  = "=== ПРИВЫЧКИ ===";
+    _ru["sys_conf"]          = "Уверенность";
+    _ru["sys_burn"]          = "Выгорание";
+    _ru["sys_motiv"]         = "Мотивация";
+    _ru["sys_anx"]           = "Тревога";
+    _ru["sys_esteem"]        = "Самооценка";
+    _ru["sys_new_achieve"]   = "НОВОЕ ДОСТИЖЕНИЕ!";
+    _ru["sys_disc_encycl"]   = "NPC открыт в энциклопедии!";
+    _ru["sys_unlocked"]      = "Разблокировано: ";
+
     // English
     _en["menu_new_game"]     = "New Game";
     _en["menu_load_game"]    = "Load Game";
     _en["menu_controls"]     = "Controls";
     _en["menu_settings"]     = "Settings";
+    _en["menu_debug"]        = "Developer Mode";
+    _en["menu_credits"]      = "Credits";
     _en["menu_exit"]         = "Exit";
     _en["menu_your_choice"]  = "Your choice";
     _en["menu_restart"]      = "Start again";
@@ -157,6 +204,8 @@ static void ensureInit() {
     _en["ui_loaded"]         = "Save loaded.";
     _en["ui_invalid"]        = "Invalid input.";
     _en["ui_save_not_found"] = "Save not found.";
+    _en["save_error_open"]   = "Error: could not open save file.";
+    _en["save_error_load"]   = "Error loading save file.";
 
     _en["as_alla"]           = "Alla";
     _en["as_bulat"]          = "Bulat";
@@ -226,6 +275,47 @@ static void ensureInit() {
     _en["end_debtor_body"]  = "Timur accumulated so many debts\nthat he can never repay them.\nSession failed, tails keep growing.\n\nOne more semester...\nAnd another one...\nAnd another...";
     _en["end_romantic_body"]= "Timur and Alla -- the perfect couple.\n\nTogether they passed all exams.\nTogether they make plans for the future.\n\nAnd they lived happily ever after...\nWell, at least until next session.";
     _en["end_army_body"]    = "Timur decided that studying is not for him.\nThe army awaits!\n\nTwo years of service.\nNew friends, new challenges.\n\nMaybe he'll come back to finish his studies.\nOr maybe he'll choose a different path.";
+
+    _en["credits_title"]     = "CREDITS";
+    _en["credits_stats"]     = "GAME STATS";
+    _en["credits_thanks"]    = "Thank you for playing!";
+    _en["credits_game_title"] = "Student Life";
+    _en["credits_team_title"] = "CREDITS — STATISTICS";
+    _en["credits_team_size"] = "Team";
+    _en["credits_lang"]      = "Language";
+    _en["credits_libs"]      = "Libraries";
+    _en["credits_none"]      = "none";
+    _en["credits_gfx"]       = "Graphics";
+    _en["credits_l10n"]      = "Localization";
+    _en["credits_profiles"]  = "UI profiles";
+    _en["credits_year"]      = "Year";
+    _en["credits_days"]      = "Days completed";
+    _en["credits_exams"]     = "Exams passed";
+    _en["credits_stress"]    = "Max stress";
+    _en["credits_money"]     = "Earned";
+    _en["credits_alla"]      = "Alla relation";
+    _en["credits_ending"]    = "Ending";
+    _en["credits_files"]     = "Files";
+    _en["credits_lines"]     = "Lines of code";
+    _en["credits_modules"]   = "Modules";
+
+    _en["sys_journal"]       = "Event Journal";
+    _en["sys_journal_empty"] = "Journal is empty.";
+    _en["sys_journal_title"] = "=== EVENT JOURNAL ===";
+    _en["sys_encyclopedia"]  = "NPC Encyclopedia";
+    _en["sys_encyclopedia_title"] = "=== NPC ENCYCLOPEDIA ===";
+    _en["sys_achievements"]  = "Achievements";
+    _en["sys_achievements_title"] = "=== ACHIEVEMENTS ===";
+    _en["sys_habits"]        = "Habits";
+    _en["sys_habits_title"]  = "=== HABITS ===";
+    _en["sys_conf"]          = "Confidence";
+    _en["sys_burn"]          = "Burnout";
+    _en["sys_motiv"]         = "Motivation";
+    _en["sys_anx"]           = "Anxiety";
+    _en["sys_esteem"]        = "Self-esteem";
+    _en["sys_new_achieve"]   = "NEW ACHIEVEMENT!";
+    _en["sys_disc_encycl"]   = "NPC discovered in encyclopedia!";
+    _en["sys_unlocked"]      = "Unlocked: ";
 }
 
 // ---- Language manager implementation ----

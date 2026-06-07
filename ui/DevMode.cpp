@@ -28,7 +28,7 @@ void DevMode::showSubheader(const std::string& title) {
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
     std::cout << BOX_V "  ◈ " << rpad(title, w - 6) << "  " BOX_V "\n";
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
 }
 
 void DevMode::waitEnter() {
@@ -73,7 +73,7 @@ void DevMode::ShowDevMenu() {
     while (running) {
         ConsoleUI::ClearScreen();
         int w = W();
-        ConsoleUI::PrintHeader("РЕЖИМ РАЗРАБОТЧИКА");
+        ConsoleUI::PrintHeader("РЕЖИМ РАЗРАБОТЧИКА", DECO_EVENT);
         std::cout << BOX_V "  " << rpad("Позволяет просматривать технические возможности игры:", w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
         std::cout << BOX_V "  " << rpad("◈ 1.  Демо анимаций", w - 4) << "  " BOX_V "\n";
@@ -89,7 +89,7 @@ void DevMode::ShowDevMenu() {
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
         std::cout << BOX_V "  " << rpad("0.  Назад", w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         std::cout << " " << Lang::get("ui_your_choice") << ": " << std::flush;
 
         int ch;
@@ -117,7 +117,7 @@ void DevMode::ShowDevMenu() {
 
 void DevMode::DemoAnimations() {
     ConsoleUI::ClearScreen();
-    ConsoleUI::PrintHeader("ДЕМО АНИМАЦИЙ");
+    ConsoleUI::PrintHeader("ДЕМО АНИМАЦИЙ", DECO_EVENT);
     int w = W();
 
     std::cout << BOX_V "  " << rpad("1. Плавная печать текста", w - 4) << "  " BOX_V "\n";
@@ -169,7 +169,7 @@ void DevMode::DemoAnimations() {
     ConsoleUI::AnimateHeart(w);
 
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     waitEnter();
 }
 
@@ -197,7 +197,7 @@ void DevMode::GalleryCharacters() {
     for (const auto& c : chars) {
         ConsoleUI::ClearScreen();
         int w = W();
-        ConsoleUI::PrintHeader("ГАЛЕРЕЯ ПЕРСОНАЖЕЙ");
+        ConsoleUI::PrintHeader("ГАЛЕРЕЯ ПЕРСОНАЖЕЙ", DECO_EVENT);
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
 
         // ASCII art
@@ -211,14 +211,14 @@ void DevMode::GalleryCharacters() {
                       << std::string(w - lPad - static_cast<int>(visLen(line) > 0 ? visLen(line) : 0), ' ') << BOX_V "\n";
         }
 
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         std::cout << BOX_V "  " << rpad("Имя: " + c.name, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V "  " << rpad("Тип: " + c.type, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V "  " << rpad("Роль: " + c.role, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
         std::cout << BOX_V "  " << rpad(c.desc, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         waitEnter();
     }
 }
@@ -248,7 +248,7 @@ void DevMode::GalleryLocations() {
     for (const auto& l : locs) {
         ConsoleUI::ClearScreen();
         int w = W();
-        ConsoleUI::PrintHeader("ГАЛЕРЕЯ ЛОКАЦИЙ");
+        ConsoleUI::PrintHeader("ГАЛЕРЕЯ ЛОКАЦИЙ", DECO_EVENT);
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
 
         std::string art = l.art();
@@ -261,13 +261,13 @@ void DevMode::GalleryLocations() {
                       << std::string(w - lPad - static_cast<int>(visLen(line) > 0 ? visLen(line) : 0), ' ') << BOX_V "\n";
         }
 
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         std::cout << BOX_V "  " << rpad("Локация: " + l.name, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V "  " << rpad("Использование: " + l.usage, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
         std::cout << BOX_V "  " << rpad(l.desc, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         waitEnter();
     }
 }
@@ -283,65 +283,82 @@ void DevMode::ShowComic() {
     };
 
     ComicFrame frames[] = {
-        {"КАДР 1: УТРО",
-         "Тимур просыпается в своей комнате. За окном шумит город.",
-         AsciiArt::GetHome(), 400},
-        {"КАДР 2: ДОРОГА",
-         "Он быстро собирается и выбегает на улицу.",
-         AsciiArt::GetStreet(), 400},
-        {"КАДР 3: УНИВЕРСИТЕТ",
-         "Перед ним возвышается здание университета.",
-         AsciiArt::GetUniversity(), 400},
-        {"КАДР 4: АУДИТОРИЯ",
-         "Экзамен начинается. Тимур берёт билет.",
-         AsciiArt::GetClassroom(), 500},
-        {"КАДР 5: ПЕРЕМЕНА",
-         "После экзамена он встречает Аллу в коридоре.",
-         AsciiArt::GetAlla(), 400},
-        {"КАДР 6: СТОЛОВАЯ",
-         "Друзья обсуждают результаты за обедом.",
-         AsciiArt::GetCafeteria(), 500},
-        {"КАДР 7: ЗАКАТ",
-         "Тимур возвращается домой. День был тяжёлым, но он справился.",
-         AsciiArt::GetHome(), 600}
+        {"FRAME 1: MORNING",
+         "Timur wakes up in his room. The city is noisy outside.",
+         AsciiArt::GetHome(), 1000},
+        {"FRAME 2: ROAD",
+         "He quickly gets ready and runs outside.",
+         AsciiArt::GetStreet(), 1000},
+        {"FRAME 3: UNIVERSITY",
+         "The university building towers before him.",
+         AsciiArt::GetUniversity(), 1000},
+        {"FRAME 4: CLASSROOM",
+         "The exam begins. Timur takes a ticket.",
+         AsciiArt::GetClassroom(), 1200},
+        {"FRAME 5: BREAK",
+         "After the exam he meets Alla in the hallway.",
+         AsciiArt::GetAlla(), 1000},
+        {"FRAME 6: CAFETERIA",
+         "Friends discuss results over lunch.",
+         AsciiArt::GetCafeteria(), 1200},
+        {"FRAME 7: SUNSET",
+         "Timur returns home. It was a tough day but he made it.",
+         AsciiArt::GetHome(), 1500}
     };
 
+    // Сначала выбираем режим
+    ConsoleUI::ClearScreen();
+    int w = W();
+    ConsoleUI::PrintHeader("COMIC MODE", DECO_EVENT);
+    std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
+    std::cout << BOX_V << rpad("  Choose viewing mode:", w) << BOX_V "\n";
+    std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
+    std::cout << BOX_V << rpad("  1. Manual (ENTER for next frame)", w) << BOX_V "\n";
+    std::cout << BOX_V << rpad("  2. Auto (automatic slideshow)", w) << BOX_V "\n";
+    std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
+    std::cout << "> ";
+    int modeChoice;
+    std::cin >> modeChoice;
+    std::cin.ignore(10000, '\n');
+    bool manualMode = (modeChoice == 1);
+
     int current = 0;
-    bool autoMode = true;
     while (current < 7) {
         ConsoleUI::ClearScreen();
-        int w = W();
-        ConsoleUI::PrintHeader("КОМИКС — " + frames[current].title);
+        ConsoleUI::PrintHeader("COMIC — " + frames[current].title, DECO_EVENT);
 
         std::string art = frames[current].art;
         std::istringstream artStream(art);
         std::string line;
         while (std::getline(artStream, line)) {
-            int lPad = (w - static_cast<int>(visLen(line))) / 2;
+            size_t v = visLen(line);
+            int lPad = (w - static_cast<int>(v)) / 2;
             if (lPad < 0) lPad = 0;
+            int rPad = w - lPad - static_cast<int>(v);
+            if (rPad < 0) rPad = 0;
             std::cout << BOX_V << std::string(lPad, ' ') << line
-                      << std::string(w - lPad - static_cast<int>(visLen(line) > 0 ? visLen(line) : 0), ' ') << BOX_V "\n";
+                      << std::string(rPad, ' ') << BOX_V "\n";
         }
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         std::cout << BOX_V "  " << rpad(frames[current].text, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_V "  " << rpad("[" + std::to_string(current + 1) + "/7] Enter — далее, A — авто, Q — выход",
+        std::cout << BOX_V "  " << rpad("[" + std::to_string(current + 1) + "/7] Q - quit",
                                         w - 4) << "  " BOX_V "\n";
-        std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
 
-        if (autoMode) {
-            sleepMs(frames[current].delayMs);
-            current++;
-        } else {
-            // Ждём ввод
+        if (manualMode) {
             std::string cmd;
             std::getline(std::cin, cmd);
             if (cmd == "q" || cmd == "Q") break;
-            if (cmd == "a" || cmd == "A") { autoMode = true; continue; }
-            if (cmd == "p" || cmd == "P") { autoMode = !autoMode; }
+            current++;
+        } else {
+            sleepMs(frames[current].delayMs);
             current++;
         }
     }
+
+    ConsoleUI::WaitForEnter();
 }
 
 // ---- 5. Демонстрация интерфейсов ----
@@ -361,7 +378,7 @@ void DevMode::DemoInterfaces() {
         p.setter();
         ConsoleUI::ClearScreen();
         int w = W();
-        ConsoleUI::PrintHeader("ДЕМОНСТРАЦИЯ: " + p.name);
+        ConsoleUI::PrintHeader("ДЕМОНСТРАЦИЯ: " + p.name, DECO_EVENT);
 
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
         std::cout << BOX_V "  " << rpad("Текущий профиль: " + UIModeManager::currentName(), w - 4) << "  " BOX_V "\n";
@@ -371,12 +388,12 @@ void DevMode::DemoInterfaces() {
         std::cout << BOX_V "  " << rpad("Строк сюжета: " + std::to_string(UIModeManager::storyRows()), w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V "  " << rpad("Строк диалога: " + std::to_string(UIModeManager::dialogRows()), w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
 
         // HUD Demo
         std::cout << BOX_V << rpad(" ДЕНЬ: 1 | ВРЕМЯ: 09:00 | ЛОКАЦИЯ: Университет", w) << BOX_V "\n";
         std::cout << BOX_V << rpad(" ИНТ:75 ЭН:50 УСТ:20 ГОЛ:10 СТР:30 РУБ:1200", w) << BOX_V "\n";
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
 
         // Story block
         std::cout << BOX_V << rpad(" Добро пожаловать в демонстрацию интерфейсов!", w) << BOX_V "\n";
@@ -386,13 +403,13 @@ void DevMode::DemoInterfaces() {
             std::cout << BOX_V << rpad(" ~ строка сюжета ~", w) << BOX_V "\n";
         }
 
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         std::cout << BOX_V << rpad(" [NPC] Привет! Как дела?", w) << BOX_V "\n";
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         std::cout << BOX_V << rpad(" 1. Поздороваться", w) << BOX_V "\n";
         std::cout << BOX_V << rpad(" 2. Спросить про экзамен", w) << BOX_V "\n";
         std::cout << BOX_V << rpad(" 3. Попрощаться", w) << BOX_V "\n";
-        std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
 
         waitEnter();
     }
@@ -436,7 +453,7 @@ void DevMode::GalleryEndings() {
         ConsoleUI::ClearScreen();
         int w = W();
         std::string t = "✦ " + e.title + " ✦";
-        ConsoleUI::PrintHeader(t);
+        ConsoleUI::PrintHeader(t, DECO_EVENT);
 
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
         std::vector<std::string> wrapped = wordWrap(e.body, w - 4);
@@ -452,7 +469,7 @@ void DevMode::GalleryEndings() {
             else std::cout << " ";
         }
         std::cout << "\n";
-        std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         waitEnter();
     }
 }
@@ -461,7 +478,7 @@ void DevMode::GalleryEndings() {
 
 void DevMode::SimulateNPCMemory() {
     ConsoleUI::ClearScreen();
-    ConsoleUI::PrintHeader("СИМУЛЯЦИЯ ПАМЯТИ NPC");
+    ConsoleUI::PrintHeader("СИМУЛЯЦИЯ ПАМЯТИ NPC", DECO_EVENT);
     int w = W();
 
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
@@ -499,11 +516,11 @@ void DevMode::SimulateNPCMemory() {
         std::cout << BOX_V "  " << rpad("  Отношение: " + std::to_string(rel) + "/100"
                                           " | Доверие: " + std::to_string(trust) + "/100", w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         sleepMs(500);
     }
 
-    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     waitEnter();
 }
 
@@ -511,7 +528,7 @@ void DevMode::SimulateNPCMemory() {
 
 void DevMode::SimulateRelations() {
     ConsoleUI::ClearScreen();
-    ConsoleUI::PrintHeader("СИМУЛЯЦИЯ ОТНОШЕНИЙ");
+    ConsoleUI::PrintHeader("СИМУЛЯЦИЯ ОТНОШЕНИЙ", DECO_EVENT);
     int w = W();
 
     struct RelLayer {
@@ -535,7 +552,7 @@ void DevMode::SimulateRelations() {
         if (step == 0) phase = "НАЧАЛЬНОЕ СОСТОЯНИЕ";
         else if (step == 1) phase = "ПОСЛЕ ПОЛОЖИТЕЛЬНЫХ ДЕЙСТВИЙ";
         else phase = "ПОСЛЕ ОТРИЦАТЕЛЬНЫХ ДЕЙСТВИЙ";
-        ConsoleUI::PrintHeader("СИМУЛЯЦИЯ — " + phase);
+        ConsoleUI::PrintHeader("СИМУЛЯЦИЯ — " + phase, DECO_EVENT);
 
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
         for (const auto& l : layers) {
@@ -560,7 +577,7 @@ void DevMode::SimulateRelations() {
             std::cout << BOX_V "  " << rpad(l.name + ": " + std::to_string(val) + "/100 " + bar, w - 4) << "  " BOX_V "\n";
         }
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         std::cout << BOX_V "  " << rpad("Пример поведения NPC при текущих параметрах:", w - 4) << "  " BOX_V "\n";
 
         if (step == 0)
@@ -571,7 +588,7 @@ void DevMode::SimulateRelations() {
             std::cout << BOX_V "  " << rpad("NPC избегает контакта, отказывает в помощи.", w - 4) << "  " BOX_V "\n";
 
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         waitEnter();
     }
 }
@@ -580,7 +597,7 @@ void DevMode::SimulateRelations() {
 
 void DevMode::DemoEvents() {
     ConsoleUI::ClearScreen();
-    ConsoleUI::PrintHeader("ДЕМОНСТРАЦИЯ СОБЫТИЙ");
+    ConsoleUI::PrintHeader("ДЕМОНСТРАЦИЯ СОБЫТИЙ", DECO_EVENT);
     int w = W();
 
     struct RandEvent {
@@ -613,11 +630,11 @@ void DevMode::DemoEvents() {
         std::cout << BOX_V "  " << rpad("  " + e.desc, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V "  " << rpad("  Эффект: " + e.effect, w - 4) << "  " BOX_V "\n";
         std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-        std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+        ConsoleUI::PrintSeparator(DECO_EVENT);
         sleepMs(300);
     }
 
-    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     waitEnter();
 }
 
@@ -625,13 +642,13 @@ void DevMode::DemoEvents() {
 
 void DevMode::Benchmark() {
     ConsoleUI::ClearScreen();
-    ConsoleUI::PrintHeader("БЕНЧМАРК ДВИЖКА / ОТЛАДОЧНАЯ СВОДКА");
+    ConsoleUI::PrintHeader("БЕНЧМАРК ДВИЖКА / ОТЛАДОЧНАЯ СВОДКА", DECO_EVENT);
     int w = W();
 
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V "  " << rpad("◆ СТАТИСТИКА ПРОЕКТА", w - 4) << "  " BOX_V "\n";
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V "  " << rpad("Количество NPC: 4 (Алла, Булат, Семён, Артём)", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V "  " << rpad("Количество дней: 8", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V "  " << rpad("Количество экзаменов: 5", w - 4) << "  " BOX_V "\n";
@@ -640,17 +657,17 @@ void DevMode::Benchmark() {
     std::cout << BOX_V "  " << rpad("Количество режимов интерфейса: 3", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
 
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V "  " << rpad("◆ ТЕКУЩАЯ КОНФИГУРАЦИЯ", w - 4) << "  " BOX_V "\n";
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V "  " << rpad("Профиль интерфейса: " + UIModeManager::currentName(), w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V "  " << rpad("Ширина экрана: " + std::to_string(UIModeManager::screenW()) + " пикселей (псевдо)", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V "  " << rpad("Язык: " + Lang::currentName(), w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
 
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V "  " << rpad("◆ ТЕХНИЧЕСКАЯ ИНФОРМАЦИЯ", w - 4) << "  " BOX_V "\n";
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V "  " << rpad("Язык разработки: C++17", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V "  " << rpad("Компилятор: MSVC 19.51 (x64)", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V "  " << rpad("Сторонние библиотеки: отсутствуют", w - 4) << "  " BOX_V "\n";
@@ -661,9 +678,9 @@ void DevMode::Benchmark() {
     std::cout << BOX_V "  " << rpad("Сохранения: бинарный файл savegame.dat", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
 
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V "  " << rpad("◆ ТЕСТ РЕНДЕРА", w - 4) << "  " BOX_V "\n";
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
 
     // Quick perf test
     int boxCount = 0;
@@ -680,6 +697,6 @@ void DevMode::Benchmark() {
     std::cout << BOX_V "  " << rpad("Производительность: высокая", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
 
-    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     waitEnter();
 }

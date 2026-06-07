@@ -19,8 +19,9 @@ $sourceFiles = @(
     "events\RandomEvent.cpp",
     "systems\RelationshipSystem.cpp", "systems\FatigueSystem.cpp",
     "systems\HungerSystem.cpp", "systems\ReputationSystem.cpp", "systems\EndingSystem.cpp",
-    "systems\DebuffSystem.cpp",
-    "ui\ConsoleUI.cpp", "ui\Menu.cpp",
+    "systems\DebuffSystem.cpp", "systems\EventJournal.cpp", "systems\Encyclopedia.cpp",
+    "systems\Achievements.cpp", "systems\Habits.cpp",
+    "ui\ConsoleUI.cpp", "ui\Menu.cpp", "ui\DevMode.cpp", "ui\Credits.cpp",
     "save\SaveManager.cpp"
 )
 

@@ -137,7 +137,10 @@ std::string Player::serialize() const {
         << stats.fatigue << " " << stats.hunger << " "
         << stats.stress << " " << stats.humanity << " "
         << stats.money << " " << stats.romance << " "
-        << stats.health << "\n"
+        << stats.health << " "
+        << stats.confidence << " " << stats.burnout << " "
+        << stats.motivation << " " << stats.anxiety << " "
+        << stats.selfEsteem << "\n"
         << currentDay << " " << currentHour << " " << currentMinute << "\n"
         << static_cast<int>(currentLocation) << "\n"
         << debts << "\n";
@@ -175,7 +178,13 @@ bool Player::deserialize(const std::string& data) {
 
     if (!(iss >> stats.intellect >> stats.energy >> stats.fatigue
         >> stats.hunger >> stats.stress >> stats.humanity
-        >> stats.money >> stats.romance >> stats.health)) return false;
+        >> stats.money >> stats.romance >> stats.health
+        >> stats.confidence >> stats.burnout
+        >> stats.motivation >> stats.anxiety >> stats.selfEsteem)) {
+        // Backward compat: set defaults
+        stats.confidence = 50; stats.burnout = 10;
+        stats.motivation = 50; stats.anxiety = 30; stats.selfEsteem = 50;
+    }
 
     int locInt;
     if (!(iss >> currentDay >> currentHour >> currentMinute >> locInt >> debts)) return false;

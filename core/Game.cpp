@@ -2,6 +2,7 @@
 #include "../ui/ConsoleUI.h"
 #include "../ui/Menu.h"
 #include "../ui/DevMode.h"
+#include "../ui/Credits.h"
 #include "../systems/EndingSystem.h"
 #include "../systems/RelationshipSystem.h"
 #include "../systems/FatigueSystem.h"
@@ -63,6 +64,9 @@ void Game::run() {
             case 5:
                 DevMode::ShowDevMenu();
                 break;
+            case 6:
+                Credits::ShowCreditsMain();
+                break;
             case 0:
                 running = false;
                 break;
@@ -99,6 +103,10 @@ void Game::run() {
         }
 
         case GamePhase::GameOver: {
+            // Показать титры с итогами
+            Credits::ShowEndingCredits(state.getPlayer(),
+                gameOverToString(state.getGameOverReason()));
+            // Затем меню перезапуска
             Menu::ShowGameOverMenu(
                 EndingSystem::GetEndingText(state.getGameOverReason()));
             int choice = Menu::MainMenuChoice();
@@ -121,6 +129,19 @@ void Game::applyDailySystems() {
     FatigueSystem::Update(state.getPlayer());
     HungerSystem::Update(state.getPlayer());
     DebuffSystem::Update(state.getPlayer());
+
+    // Скрытые параметры: ежедневные изменения
+    auto& s = state.getPlayer().getStats();
+    if (s.fatigue > 60) { s.burnout += 2; s.motivation -= 3; }
+    else if (s.fatigue < 20) { s.burnout -= 1; }
+    if (s.stress > 70) { s.anxiety += 3; s.selfEsteem -= 2; }
+    if (s.hunger > 70) { s.motivation -= 2; s.anxiety += 1; }
+    if (s.energy > 70) { s.motivation += 2; }
+    if (s.intellect > 70) { s.confidence += 2; s.selfEsteem += 1; }
+    s.clampAll();
+
+    // Привычки: проверка и обновление
+    checkAchievements();
 }
 
 void Game::checkGameOver() {
@@ -142,6 +163,10 @@ void Game::saveGame() {
     addNPCData(*semen);
     addNPCData(*artem);
     state.setNPCMemoryData(npcData);
+    state.setJournalData(journal.serialize());
+    state.setEncyclopediaData(encyclopedia.serialize());
+    state.setAchievementsData(achievements.serialize());
+    state.setHabitsData(habits.serialize());
     SaveManager::SaveGame(state);
 }
 
@@ -156,7 +181,6 @@ void Game::loadGame() {
                 size_t pos = npcData.find("---NPC_END---");
                 if (pos != std::string::npos) {
                     std::string block = npcData.substr(0, pos);
-                    // Check if this block belongs to this NPC by finding the name
                     if (block.find(expectedName) != std::string::npos) {
                         npc.deserialize(block);
                     }
@@ -168,6 +192,15 @@ void Game::loadGame() {
             restoreNPC(*semen, "Семён");
             restoreNPC(*artem, "Артём");
         }
+        // Restore new systems
+        if (!state.getJournalData().empty())
+            journal.deserialize(state.getJournalData());
+        if (!state.getEncyclopediaData().empty())
+            encyclopedia.deserialize(state.getEncyclopediaData());
+        if (!state.getAchievementsData().empty())
+            achievements.deserialize(state.getAchievementsData());
+        if (!state.getHabitsData().empty())
+            habits.deserialize(state.getHabitsData());
     }
 }
 
@@ -227,13 +260,13 @@ void Game::recordNPCChoice(const std::string& npcName, const std::string& choice
 void Game::runPrologue() {
     ConsoleUI::ClearScreen();
     int w = UIModeManager::screenW();
-    std::cout << BOX_TL << std::string(w, BOX_H[0]) << BOX_TR "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V << rpad("", w) << BOX_V "\n";
     std::string prologueTitle = "ПРОЛОГ";
     int lt = (w - static_cast<int>(visLen(prologueTitle + "  "))) / 2;
     std::cout << BOX_V << rpad(std::string(lt, ' ') + prologueTitle, w) << BOX_V "\n";
     std::cout << BOX_V << rpad("", w) << BOX_V "\n";
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
     std::cout << BOX_V << rpad("", w) << BOX_V "\n";
     std::cout << BOX_V "  " << rpad("Лето пролетело незаметно. Как будто только вчера", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V "  " << rpad("прозвенел последний звонок в школе, а сегодня ты уже", w - 4) << "  " BOX_V "\n";
@@ -254,7 +287,10 @@ void Game::runPrologue() {
     std::cout << BOX_V << rpad("", w) << BOX_V "\n";
     std::cout << BOX_V "  " << rpad("Твоя история начинается прямо сейчас...", w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V << rpad("", w) << BOX_V "\n";
-    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
+    journal.addEntry(1, "Общежитие",
+        "Первый день сессии. Познакомился с соседями по общежитию.", "story", 4);
+
     ConsoleUI::WaitForEnter();
 }
 
@@ -369,6 +405,14 @@ void Game::runDay1() {
     ConsoleUI::PrintHeader("ЭКЗАМЕН ПО ИСТОРИИ");
     HistoryExam historyExam;
     historyExam.runExam(state.getPlayer());
+    {
+        int gr = state.getPlayer().getGrade(0);
+        journal.addEntry(1, "Университет",
+            std::string("Экзамен по истории: ") + (gr >= 5 ? "сдал" : "провал"),
+            "exam", gr >= 5 ? 4 : 2);
+        achievements.unlock("first_exam");
+        if (gr >= 9) achievements.unlock("excellent");
+    }
     ConsoleUI::WaitForEnter();
 
     // После экзамена
@@ -487,6 +531,12 @@ void Game::runDay2() {
     ConsoleUI::PrintHeader("ЭКЗАМЕН ПО ЯИМП");
     YAMPExam yampExam;
     yampExam.runExam(state.getPlayer());
+    {
+        int gr = state.getPlayer().getGrade(1);
+        journal.addEntry(2, "Университет",
+            std::string("Экзамен по ЯИМП: ") + (gr >= 5 ? "сдал" : "провал"),
+            "exam", gr >= 5 ? 4 : 2);
+    }
 
     // После экзамена
     {
@@ -762,6 +812,13 @@ void Game::runDay4() {
         ConsoleUI::WaitForEnter();
     }
 
+    {
+        int gr = state.getPlayer().getGrade(3);
+        journal.addEntry(4, "Университет",
+            std::string("Дискретная математика: ") + (gr >= 5 ? "сдал" : "провал"),
+            "exam", gr >= 5 ? 4 : 2);
+    }
+
     ConsoleUI::WaitForEnter();
 
     // После экзамена
@@ -866,6 +923,13 @@ void Game::runDay5() {
         score = std::min(100, score + 15);
         state.getPlayer().setGrade(4, score);
         ConsoleUI::WaitForEnter();
+    }
+
+    {
+        int gr = state.getPlayer().getGrade(4);
+        journal.addEntry(5, "Университет",
+            std::string("Матанализ: ") + (gr >= 5 ? "сдал" : "провал"),
+            "exam", gr >= 5 ? 4 : 2);
     }
 
     ConsoleUI::WaitForEnter();
@@ -1264,13 +1328,19 @@ void Game::runDay8() {
     ConsoleUI::PrintHeader("ПОСЛЕДНИЙ ЭКЗАМЕН — КОМПЬЮТЕРНЫЕ СЕТИ");
     NetworksExam networksExam;
     networksExam.runExam(state.getPlayer());
+    {
+        int gr = state.getPlayer().getGrade(5);
+        journal.addEntry(8, "Университет",
+            std::string("Компьютерные сети: ") + (gr >= 5 ? "сдал" : "провал"),
+            "exam", gr >= 5 ? 4 : 2);
+    }
     ConsoleUI::WaitForEnter();
 
     // Подведение итогов
     ConsoleUI::PrintHeader("ПОДВЕДЕНИЕ ИТОГОВ");
 
     const auto& stats = state.getPlayer().getStats();
-    std::cout << BOX_TL << std::string(78, BOX_H[0]) << BOX_TR "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
     std::cout << BOX_V "  Сессия позади. Давай посмотрим, как всё прошло." << std::string(20, ' ') << BOX_V "\n";
     std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
@@ -1301,13 +1371,23 @@ void Game::runDay8() {
     printStat("Романтика", stats.romance);
     printStat("Отношения с Аллой", state.getPlayer().getRelation("Алла"));
     printStat("Долгов", state.getPlayer().getDebts());
-    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  Скрытые параметры:" << std::string(57, ' ') << BOX_V "\n";
+    printStat("Уверенность", stats.confidence);
+    printStat("Выгорание", stats.burnout);
+    printStat("Мотивация", stats.motivation);
+    printStat("Тревожность", stats.anxiety);
+    printStat("Самооценка", stats.selfEsteem);
+    std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  Достижений: " << achievements.getUnlockedCount()
+              << "/" << achievements.getTotalCount() << std::string(55, ' ') << BOX_V "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     ConsoleUI::WaitForEnter();
 
     // Финальный выбор
-    std::cout << BOX_TL << std::string(78, BOX_H[0]) << BOX_TR "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " ФИНАЛЬНЫЙ ВЫБОР" << std::string(63, ' ') << BOX_V "\n";
-    std::cout << BOX_L << std::string(78, BOX_H[0]) << BOX_R "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V "  Что ты чувствуешь после сессии?" << std::string(46, ' ') << BOX_V "\n";
     std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
     std::cout << BOX_V "  1. Гордость — ты справился со всем!" << std::string(36, ' ') << BOX_V "\n";
@@ -1317,7 +1397,7 @@ void Game::runDay8() {
     std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
     std::cout << BOX_V "  Ваш выбор [0-4]: ";
     std::cout << std::string(40, ' ') << BOX_V "\n";
-    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
 
     // Курсор уже в нужном месте после "Ваш выбор"
     std::cout << "\r                                                                                \r";
@@ -1358,7 +1438,8 @@ void Game::handleHomeLocation() {
     ConsoleUI::PrintHeader("ДОМ");
     ConsoleUI::ShowLocationArt(LocationID::Home);
     ConsoleUI::RenderScreen("ДОМ", "Ты дома. Можно отдохнуть.",
-        {"Лечь спать", "Поесть", "Позаниматься"},
+        {"Лечь спать", "Поесть", "Позаниматься",
+         "Журнал событий", "Энциклопедия", "Достижения", "Привычки"},
         state.getPlayer());
 
     int choice;
@@ -1386,9 +1467,20 @@ void Game::handleHomeLocation() {
         state.getPlayer().advanceTime(120);
         ConsoleUI::RenderScreen("ЗАНЯТИЯ", "Ты позанимался.", {}, state.getPlayer());
         break;
+    case 4:
+        showJournal();
+        break;
+    case 5:
+        showEncyclopedia();
+        break;
+    case 6:
+        showAchievements();
+        break;
+    case 7:
+        showHabits();
+        break;
     }
     s.clampAll();
-    ConsoleUI::WaitForEnter();
 }
 
 void Game::handleUniversityLocation() {
@@ -1580,17 +1672,17 @@ void Game::handleFlowerShopLocation() {
 // ==================== ВЗАИМОДЕЙСТВИЕ С NPC ====================
 
 void Game::interactWithAlla() {
-    ConsoleUI::PrintHeader("ОБЩЕНИЕ С АЛЛОЙ");
+    ConsoleUI::PrintHeader("ОБЩЕНИЕ С АЛЛОЙ", DECO_EVENT);
     ConsoleUI::ShowNPCPortrait("Алла");
     std::cout << BOX_V " " << alla->getDialog(state.getPlayer()) << "\n";
-    ConsoleUI::PrintSeparator();
+    ConsoleUI::PrintSeparator(DECO_EVENT);
 
     auto choices = alla->getChoices(state.getPlayer());
     for (size_t i = 0; i < choices.size(); i++) {
         std::cout << BOX_V " " << (i + 1) << ". " << choices[i].text << "\n";
     }
     std::cout << BOX_V " 0. Закончить разговор\n";
-    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
     int choice;
@@ -1607,7 +1699,15 @@ void Game::interactWithAlla() {
             ConsoleUI::PrintHeader("СВИДАНИЕ");
             std::cout << BOX_V " Алла соглашается! Вы договариваетесь о встрече.\n";
             state.getPlayer().setFlag("day7_available", true);
+            // Открываем Аллу в энциклопедии
+            encyclopedia.discover("Алла");
+            std::cout << BOX_V " " << Lang::get("sys_disc_encycl") << "\n";
         }
+    }
+
+    // Открываем NPC в энциклопедии при первом взаимодействии
+    if (!encyclopedia.isDiscovered("Алла")) {
+        encyclopedia.discover("Алла");
     }
 
     state.getPlayer().advanceTime(15);
@@ -1625,7 +1725,7 @@ void Game::interactWithBulat() {
         std::cout << BOX_V " " << (i + 1) << ". " << choices[i].text << "\n";
     }
     std::cout << BOX_V " 0. Закончить разговор\n";
-    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
     int choice;
@@ -1636,6 +1736,10 @@ void Game::interactWithBulat() {
         const auto& selected = choices[choice - 1];
         RelationshipSystem::ApplyChoiceEffect(state.getPlayer(), "Булат", selected.effects);
         std::cout << "\n" << selected.resultingText << "\n";
+    }
+
+    if (!encyclopedia.isDiscovered("Булат")) {
+        encyclopedia.discover("Булат");
     }
 
     state.getPlayer().advanceTime(15);
@@ -1653,7 +1757,7 @@ void Game::interactWithSemen() {
         std::cout << BOX_V " " << (i + 1) << ". " << choices[i].text << "\n";
     }
     std::cout << BOX_V " 0. Закончить разговор\n";
-    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
     int choice;
@@ -1664,6 +1768,10 @@ void Game::interactWithSemen() {
         const auto& selected = choices[choice - 1];
         RelationshipSystem::ApplyChoiceEffect(state.getPlayer(), "Семён", selected.effects);
         std::cout << "\n" << selected.resultingText << "\n";
+    }
+
+    if (!encyclopedia.isDiscovered("Семён")) {
+        encyclopedia.discover("Семён");
     }
 
     state.getPlayer().advanceTime(15);
@@ -1681,7 +1789,7 @@ void Game::interactWithArtem() {
         std::cout << BOX_V " " << (i + 1) << ". " << choices[i].text << "\n";
     }
     std::cout << BOX_V " 0. Закончить разговор\n";
-    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
     int choice;
@@ -1694,6 +1802,106 @@ void Game::interactWithArtem() {
         std::cout << "\n" << selected.resultingText << "\n";
     }
 
+    if (!encyclopedia.isDiscovered("Артём")) {
+        encyclopedia.discover("Артём");
+    }
+
     state.getPlayer().advanceTime(15);
+    ConsoleUI::WaitForEnter();
+}
+
+void Game::modifyHiddenStat(const std::string& stat, int delta) {
+    auto& s = state.getPlayer().getStats();
+    if (stat == "confidence") s.confidence += delta;
+    else if (stat == "burnout") s.burnout += delta;
+    else if (stat == "motivation") s.motivation += delta;
+    else if (stat == "anxiety") s.anxiety += delta;
+    else if (stat == "selfEsteem") s.selfEsteem += delta;
+    s.clampAll();
+}
+
+void Game::checkAchievements() {
+    const auto& s = state.getPlayer().getStats();
+
+    auto tryUnlock = [&](const std::string& id) {
+        if (achievements.unlock(id)) {
+            const auto* ach = achievements.getAchievement(id);
+            if (ach) {
+                std::cout << "\n" << DECO_EVENT << std::string(46, BOX_H[0]) << DECO_EVENT "\n";
+                std::cout << BOX_V "  " << Lang::get("sys_new_achieve") << "\n";
+                std::cout << BOX_V "  " << ach->title << ": " << ach->description << "\n";
+                std::cout << DECO_EVENT << std::string(46, BOX_H[0]) << DECO_EVENT "\n\n";
+                ConsoleUI::WaitForEnter();
+            }
+        }
+    };
+
+    if (s.money >= 5000) tryUnlock("millionaire");
+    if (state.getPlayer().getCurrentDay() >= 8) tryUnlock("survivor");
+}
+
+void Game::showJournal() {
+    ConsoleUI::ClearScreen();
+    ConsoleUI::PrintHeader(Lang::get("sys_journal_title"));
+    auto entries = journal.getRecent(20);
+    if (entries.empty()) {
+        ConsoleUI::PrintText(Lang::get("sys_journal_empty"));
+    } else {
+        for (const auto& e : entries) {
+            std::cout << "  " << e.toString() << "\n";
+        }
+    }
+    ConsoleUI::PrintSeparator();
+    ConsoleUI::WaitForEnter();
+}
+
+void Game::showEncyclopedia() {
+    ConsoleUI::ClearScreen();
+    ConsoleUI::PrintHeader(Lang::get("sys_encyclopedia_title"));
+    auto discovered = encyclopedia.getDiscoveredList();
+    if (discovered.empty()) {
+        ConsoleUI::PrintText(Lang::get("sys_journal_empty"));
+    } else {
+        for (const auto& name : discovered) {
+            const auto* entry = encyclopedia.getEntry(name);
+            if (entry) {
+                std::cout << "\n";
+                ConsoleUI::PrintText(entry->formatEntry());
+                ConsoleUI::PrintSeparator();
+            }
+        }
+    }
+    ConsoleUI::WaitForEnter();
+}
+
+void Game::showAchievements() {
+    ConsoleUI::ClearScreen();
+    ConsoleUI::PrintHeader(Lang::get("sys_achievements_title"));
+    int total = achievements.getTotalCount();
+    int unlocked = achievements.getUnlockedCount();
+    std::cout << "  " << Lang::get("sys_unlocked") << unlocked << "/" << total << "\n\n";
+    auto all = achievements.getAll();
+    for (const auto* ach : all) {
+        std::string status = ach->unlocked ? "■" : "□";
+        std::cout << "  " << status << " " << ach->title << " — " << ach->description << "\n";
+    }
+    ConsoleUI::PrintSeparator();
+    ConsoleUI::WaitForEnter();
+}
+
+void Game::showHabits() {
+    ConsoleUI::ClearScreen();
+    ConsoleUI::PrintHeader(Lang::get("sys_habits_title"));
+    bool any = false;
+    for (const auto* h : habits.getAllHabits()) {
+        any = true;
+        std::string icon = h->isPositive ? "+" : "-";
+        std::string streak = h->streak > 0
+            ? std::to_string(h->streak) + " дн."
+            : "не начата";
+        std::cout << "  " << icon << " " << h->title << " [" << streak << "]\n";
+    }
+    if (!any) ConsoleUI::PrintText(Lang::get("sys_journal_empty"));
+    ConsoleUI::PrintSeparator();
     ConsoleUI::WaitForEnter();
 }

@@ -4,6 +4,10 @@
 #include "../events/RandomEvent.h"
 #include "../exams/Exam.h"
 #include "../save/SaveManager.h"
+#include "../systems/EventJournal.h"
+#include "../systems/Encyclopedia.h"
+#include "../systems/Achievements.h"
+#include "../systems/Habits.h"
 #include <memory>
 #include <map>
 
@@ -15,6 +19,10 @@ private:
     std::unique_ptr<Semen> semen;
     std::unique_ptr<Artem> artem;
     RandomEventManager eventManager;
+    EventJournal journal;
+    Encyclopedia encyclopedia;
+    AchievementSystem achievements;
+    HabitSystem habits;
     bool running = true;
 
     void initGame();
@@ -57,6 +65,16 @@ private:
     // Системы
     void applyDailySystems();
     void checkGameOver();
+    void checkAchievements();
+
+    // UI для новых систем
+    void showJournal();
+    void showEncyclopedia();
+    void showAchievements();
+    void showHabits();
+
+    // Изменение скрытых параметров
+    void modifyHiddenStat(const std::string& stat, int delta);
 
 public:
     Game();

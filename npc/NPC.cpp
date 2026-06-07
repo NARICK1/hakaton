@@ -15,6 +15,22 @@ void NPC::modifyTrust(int delta) {
     trustLevel = std::clamp(trustLevel + delta, 0, 100);
 }
 
+void NPC::modifyRespect(int delta) {
+    respectLevel = std::clamp(respectLevel + delta, 0, 100);
+}
+
+void NPC::modifySympathy(int delta) {
+    sympathyLevel = std::clamp(sympathyLevel + delta, 0, 100);
+}
+
+void NPC::modifyInterest(int delta) {
+    interestLevel = std::clamp(interestLevel + delta, 0, 100);
+}
+
+void NPC::modifyIrritation(int delta) {
+    irritationLevel = std::clamp(irritationLevel + delta, 0, 100);
+}
+
 void NPC::rememberEvent(const std::string& eventKey, int value) {
     memory[eventKey] = { eventKey, value, true };
 }
@@ -42,22 +58,43 @@ int NPC::getHelpCount() const {
 
 void NPC::recordAction(const NPCAction& action) {
     actionHistory.push_back(action);
-    // Auto-update trust and relationship based on categories
     if (action.category == "helpful") {
         modifyRelationship(action.influence);
         modifyTrust(action.influence / 2);
+        modifyRespect(action.influence / 3);
+        modifySympathy(action.influence / 4);
+        modifyInterest(action.influence / 4);
+        modifyIrritation(-action.influence / 5);
     } else if (action.category == "rude" || action.category == "selfish") {
         modifyRelationship(-action.influence);
         modifyTrust(-action.influence / 2);
+        modifyRespect(-action.influence / 2);
+        modifySympathy(-action.influence / 3);
+        modifyInterest(-action.influence / 4);
+        modifyIrritation(action.influence / 2);
     } else if (action.category == "romance") {
         modifyRelationship(action.influence * 2);
+        modifySympathy(action.influence);
+        modifyTrust(action.influence / 2);
+        modifyInterest(action.influence / 2);
+        modifyIrritation(-action.influence / 5);
     } else if (action.category == "trust") {
         modifyTrust(action.influence);
         modifyRelationship(action.influence);
+        modifyRespect(action.influence / 2);
+        modifySympathy(action.influence / 3);
+    } else if (action.category == "generous") {
+        modifyRelationship(action.influence);
+        modifySympathy(action.influence / 2);
+        modifyRespect(action.influence / 2);
+        modifyTrust(action.influence / 3);
+        modifyInterest(action.influence / 3);
     }
     if (!action.fulfilledPromise) {
         modifyTrust(-10);
         modifyRelationship(-5);
+        modifyRespect(-8);
+        modifyIrritation(5);
     }
 }
 
@@ -69,32 +106,32 @@ int NPC::countActionsByCategory(const std::string& category) const {
     return count;
 }
 
-bool NPC::hasPositiveHistory(int recentDays) const {
-    int currentDay = 0; // placeholder, caller's context would set this
+bool NPC::hasPositiveHistory(int currentDay, int recentDays) const {
     int posCount = 0, negCount = 0;
+    int cutoff = currentDay - recentDays;
     for (const auto& a : actionHistory) {
-        if (a.day >= currentDay - recentDays) {
+        if (a.day >= cutoff) {
             if (a.category == "helpful" || a.category == "generous" || a.category == "romance" || a.category == "trust")
                 posCount++;
             else if (a.category == "rude" || a.category == "selfish")
                 negCount++;
         }
     }
-    return posCount > negCount;
+    return posCount > negCount && posCount > 0;
 }
 
-bool NPC::hasNegativeHistory(int recentDays) const {
-    int currentDay = 0;
+bool NPC::hasNegativeHistory(int currentDay, int recentDays) const {
     int posCount = 0, negCount = 0;
+    int cutoff = currentDay - recentDays;
     for (const auto& a : actionHistory) {
-        if (a.day >= currentDay - recentDays) {
+        if (a.day >= cutoff) {
             if (a.category == "helpful" || a.category == "generous" || a.category == "romance" || a.category == "trust")
                 posCount++;
             else if (a.category == "rude" || a.category == "selfish")
                 negCount++;
         }
     }
-    return negCount > posCount;
+    return negCount > posCount && negCount > 0;
 }
 
 std::string NPC::getEmotionalState() const {
@@ -121,6 +158,10 @@ std::vector<Choice> NPC::getChoices(const Player& player) const {
 std::string NPC::serialize() const {
     std::string data = name + "\n" + std::to_string(relationship) + "\n";
     data += std::to_string(trustLevel) + "\n";
+    data += std::to_string(respectLevel) + "\n";
+    data += std::to_string(sympathyLevel) + "\n";
+    data += std::to_string(interestLevel) + "\n";
+    data += std::to_string(irritationLevel) + "\n";
     data += std::to_string(memory.size()) + "\n";
     for (const auto& [key, entry] : memory) {
         data += key + "," + std::to_string(entry.value) + "," + (entry.triggered ? "1" : "0") + "\n";
@@ -140,6 +181,10 @@ bool NPC::deserialize(const std::string& data) {
     if (!std::getline(iss, name)) return false;
     if (!(iss >> relationship)) return false;
     if (!(iss >> trustLevel)) return false;
+    if (!(iss >> respectLevel)) respectLevel = 50;
+    if (!(iss >> sympathyLevel)) sympathyLevel = 50;
+    if (!(iss >> interestLevel)) interestLevel = 50;
+    if (!(iss >> irritationLevel)) irritationLevel = 10;
     size_t memSize;
     if (!(iss >> memSize)) return false;
     memory.clear();

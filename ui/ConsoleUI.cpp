@@ -101,8 +101,13 @@ void ConsoleUI::ClearScreen() {
 void ConsoleUI::WaitForEnter() {
     int totalW = UIModeManager::screenW();
     std::cout << "\n"
-              << BOX_V " " << Lang::get("ui_press_enter") << "\n"
-              << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
+              << BOX_V " " << Lang::get("ui_press_enter") << "\n";
+    // Use event separator for wait prompts
+    std::string d = DECO_EVENT;
+    int dLen = static_cast<int>(visLen(d));
+    int midW = totalW - dLen * 2;
+    if (midW < 0) midW = 0;
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
     std::cin.ignore(10000, '\n');
     std::cin.get();
 }
@@ -117,15 +122,21 @@ int ConsoleUI::ShowMenu(const std::vector<std::string>& options,
     }
     maxW = std::min(maxW, totalW);
 
-    std::cout << BOX_TL << std::string(maxW, BOX_H[0]) << BOX_TR "\n";
+    std::string pr = prompt.empty() ? Lang::get("ui_your_choice") : prompt;
+    std::string d = DECO_EVENT;
+    int dLen = static_cast<int>(visLen(d));
+    int midW = maxW - dLen * 2;
+    if (midW < 0) midW = 0;
+
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
     for (size_t i = 0; i < options.size(); i++) {
         std::string line = std::to_string(i + 1) + ". " + options[i];
         std::cout << BOX_V " " << rpad(line, maxW - 2) << BOX_V "\n";
     }
-    std::cout << BOX_L << std::string(maxW, BOX_H[0]) << BOX_R "\n";
-    std::string p = " " + prompt + ": ";
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
+    std::string p = " " + pr + ": ";
     std::cout << BOX_V << rpad(p, maxW) << BOX_V "\n";
-    std::cout << BOX_BL << std::string(maxW, BOX_H[0]) << BOX_BR "\n";
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
     std::cout << "> ";
     int choice;
     std::cin >> choice;
@@ -136,18 +147,20 @@ int ConsoleUI::ShowMenu(const std::vector<std::string>& options,
 // ---- Status Bars ----
 
 std::string ConsoleUI::MakeBarString(int value, int maxVal, int width) {
-    if (maxVal <= 0 || width <= 0) return std::string(width, BAR_EMPTY[0]);
+    if (maxVal <= 0 || width <= 0) {
+        std::string e;
+        for (int i = 0; i < width; i++) e += BAR_EMPTY;
+        return e;
+    }
     float ratio = std::clamp(static_cast<float>(value) / maxVal, 0.0f, 1.0f);
     int filled = static_cast<int>(ratio * width);
-    int half = 0;
+    std::string r;
+    for (int i = 0; i < filled && i < width; i++) r += BAR_FULL;
     if (filled < width) {
         float remainder = (ratio * width) - filled;
-        if (remainder > 0.3f) half = 1;
+        if (remainder > 0.3f) r += BAR_HALF;
+        for (int i = filled + 1; i < width; i++) r += BAR_EMPTY;
     }
-    std::string r;
-    r += std::string(filled, BAR_FULL[0]);
-    if (half) r += BAR_HALF[0];
-    r += std::string(width - filled - half, BAR_EMPTY[0]);
     return r;
 }
 
@@ -181,15 +194,38 @@ std::string ConsoleUI::MakeStatBar(const Player& player) {
        << " " << ml << ":" << s.money;
     std::string text = ss.str();
 
-    // All bars same length (12)
+    int barLen = std::min(8, (totalW - static_cast<int>(visLen(text)) - 6) / 6);
+    barLen = std::max(3, barLen);
+    // All bars same length
     std::string bars = " ["
-        + MakeBarString(s.intellect, GameConstants::MAX_STAT, 12) + "]"
-        + "[" + MakeBarString(s.energy, GameConstants::MAX_STAT, 12) + "]"
-        + "[" + MakeBarString(100 - s.fatigue, 100, 12) + "]"
-        + "[" + MakeBarString(100 - s.hunger, 100, 12) + "]"
-        + "[" + MakeBarString(100 - s.stress, 100, 12) + "]"
-        + "[" + MakeBarString(s.money, 5000, 12) + "]";
+        + MakeBarString(s.intellect, GameConstants::MAX_STAT, barLen) + "]"
+        + "[" + MakeBarString(s.energy, GameConstants::MAX_STAT, barLen) + "]"
+        + "[" + MakeBarString(100 - s.fatigue, 100, barLen) + "]"
+        + "[" + MakeBarString(100 - s.hunger, 100, barLen) + "]"
+        + "[" + MakeBarString(100 - s.stress, 100, barLen) + "]"
+        + "[" + MakeBarString(s.money, 5000, barLen) + "]";
     return text + "  " + bars;
+}
+
+// ---- Decorative line helper ----
+
+static std::string decoLine(int w, const std::string& d) {
+    int dl = static_cast<int>(visLen(d));
+    int mw = w - dl * 2;
+    if (mw < 0) mw = 0;
+    return d + std::string(mw, BOX_H[0]) + d;
+}
+
+static std::string pickDeco(bool isExam, bool isEnding, bool isRain,
+                             const std::string& npc, const std::string& loc) {
+    (void)isRain; (void)loc;
+    if (isEnding) return DECO_SPECIAL;
+    if (isExam)   return DECO_EXAM;
+    std::string lcnpc = lc(npc);
+    if (lcnpc.find("alla") != std::string::npos) return DECO_ROMANCE;
+    if (loc.find("phone") != std::string::npos || loc.find("call") != std::string::npos)
+        return DECO_CALL;
+    return DECO_EVENT;
 }
 
 // ---- Unified Screen Renderer ----
@@ -236,8 +272,11 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     int remainingLines = static_cast<int>(storyLines.size()) - storyRows;
     int rpHeight = std::max(storyRows, 4);
 
+    // Choose decoration based on context
+    std::string deco = pickDeco(isExam, isEnding, isRain, sceneNPC, sceneLocation);
+
     // ---- TOP FRAME ----
-    std::cout << BOX_TL << std::string(totalW, BOX_H[0]) << BOX_TR "\n";
+    std::cout << decoLine(totalW, deco) << "\n";
 
     // ---- HUD SECTION ----
     // Scene title / day name centered
@@ -245,7 +284,7 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     int tLen = static_cast<int>(visLen(title));
     int lPad = (totalW - tLen) / 2;
     std::cout << BOX_V << rpad(std::string(lPad, ' ') + title, totalW) << BOX_V "\n";
-    std::cout << BOX_L << std::string(totalW, BOX_H[0]) << BOX_R "\n";
+    std::cout << decoLine(totalW, deco) << "\n";
 
     // HUD Line 1: День | Время | Локация
     std::string hud1 = MakeTopBar(player);
@@ -256,7 +295,7 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     std::cout << BOX_V << rpad(" " + hud2, totalW) << BOX_V "\n";
 
     // Split separator
-    std::cout << BOX_L << std::string(totalW, BOX_H[0]) << BOX_R "\n";
+    std::cout << decoLine(totalW, deco) << "\n";
 
     // ---- MAIN CONTENT: Story + Right Panel ----
     int maxContentRows = std::max(rpHeight, static_cast<int>(rpLines.size()));
@@ -275,7 +314,7 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     }
 
     // Dialog separator
-    std::cout << BOX_L << std::string(totalW, BOX_H[0]) << BOX_R "\n";
+    std::cout << decoLine(totalW, deco) << "\n";
 
     // ---- DIALOG SECTION ----
     if (remainingLines > 0) {
@@ -287,7 +326,7 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
         if (!sceneNPC.empty()) {
             dialogHeader = sceneNPC;
             std::cout << BOX_V << rpad(" " + dialogHeader, totalW) << BOX_V "\n";
-            std::cout << BOX_L << std::string(totalW, BOX_H[0]) << BOX_R "\n";
+            std::cout << decoLine(totalW, deco) << "\n";
         }
 
         int dialogLines = std::min(remainingLines, 3);
@@ -300,7 +339,7 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     }
 
     // Choices separator
-    std::cout << BOX_L << std::string(totalW, BOX_H[0]) << BOX_R "\n";
+    std::cout << decoLine(totalW, deco) << "\n";
 
     // ---- CHOICES SECTION ----
     for (size_t i = 0; i < choices.size(); i++) {
@@ -313,9 +352,9 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     // Bottom frame + prompt
     std::string prompt = " " + Lang::get("ui_your_choice") + " [1-"
                        + std::to_string(choices.size()) + "]: ";
-    std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
+    std::cout << decoLine(totalW, deco) << "\n";
     std::cout << BOX_V << rpad(prompt, totalW) << BOX_V "\n";
-    std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
+    std::cout << decoLine(totalW, deco) << "\n";
     std::cout << "> ";
 }
 
@@ -383,24 +422,36 @@ std::string ConsoleUI::AutoRightPanel(const Player& player,
 
 // ---- Legacy wrappers ----
 
-void ConsoleUI::PrintSeparator() {
-    std::cout << BOX_L << std::string(UIModeManager::screenW(), BOX_H[0]) << BOX_R "\n";
+void ConsoleUI::PrintSeparator(const std::string& deco) {
+    int totalW = UIModeManager::screenW();
+    std::string d = deco.empty() ? DECO_EVENT : deco;
+    int decoLen = static_cast<int>(visLen(d));
+    int midW = totalW - decoLen * 2;
+    if (midW < 0) midW = 0;
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
 }
 
-void ConsoleUI::PrintHeader(const std::string& title) {
+void ConsoleUI::PrintHeader(const std::string& title, const std::string& deco) {
     int totalW = UIModeManager::screenW();
     std::string t = " " + title + " ";
     int tPad = (totalW - static_cast<int>(visLen(t))) / 2;
-    std::cout << BOX_TL << std::string(totalW, BOX_H[0]) << BOX_TR "\n";
+    std::string d = deco.empty() ? DECO_EVENT : deco;
+    int decoLen = static_cast<int>(visLen(d));
+    int midW = totalW - decoLen * 2;
+    if (midW < 0) midW = 0;
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
     std::cout << BOX_V << rpad(std::string(tPad, ' ') + t, totalW) << BOX_V "\n";
-    std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
 }
 
 void ConsoleUI::PrintPlayerStats(const Player& player) {
     const auto& stats = player.getStats();
     int totalW = UIModeManager::screenW();
+    int decoLen = static_cast<int>(visLen(DECO_EVENT));
+    int midW = totalW - decoLen * 2;
+    if (midW < 0) midW = 0;
 
-    std::cout << BOX_TL << std::string(totalW, BOX_H[0]) << BOX_TR "\n";
+    std::cout << DECO_EVENT << std::string(midW, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " " << rpad(
         player.getName() + " | " + player.getTimeString()
         + " | " + Lang::get("hud_day") + " " + std::to_string(player.getCurrentDay())
@@ -444,13 +495,16 @@ void ConsoleUI::PrintPlayerStats(const Player& player) {
         first = false;
     }
     std::cout << "\n";
-    std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
+    std::cout << DECO_EVENT << std::string(midW, BOX_H[0]) << DECO_EVENT "\n";
 }
 
 void ConsoleUI::ShowDayTransition(int day, const std::string& dayName) {
     ClearScreen();
     int totalW = UIModeManager::screenW();
-    std::cout << BOX_TL << std::string(totalW, BOX_H[0]) << BOX_TR "\n";
+    int decoLen = static_cast<int>(visLen(DECO_EVENT));
+    int midW = totalW - decoLen * 2;
+    if (midW < 0) midW = 0;
+    std::cout << DECO_EVENT << std::string(midW, BOX_H[0]) << DECO_EVENT "\n";
     for (int i = 0; i < totalW; i++) {
         std::cout << "\r" BOX_V << std::string(i, '=') << ">" << std::flush;
         sleepMs(5);
@@ -468,7 +522,7 @@ void ConsoleUI::ShowDayTransition(int day, const std::string& dayName) {
     std::cout << BOX_V << std::string(lPad, ' ') << sub
               << std::string(totalW - lPad - static_cast<int>(sub.size()), ' ') << BOX_V "\n";
 
-    std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
+    std::cout << DECO_EVENT << std::string(midW, BOX_H[0]) << DECO_EVENT "\n";
     sleepMs(500);
 }
 
@@ -489,9 +543,12 @@ void ConsoleUI::PrintText(const std::string& text) {
 
 void ConsoleUI::PrintLocationMenu(LocationID location) {
     int totalW = UIModeManager::screenW();
-    std::cout << BOX_TL << std::string(totalW, BOX_H[0]) << BOX_TR "\n";
+    int decoLen = static_cast<int>(visLen(DECO_EVENT));
+    int midW = totalW - decoLen * 2;
+    if (midW < 0) midW = 0;
+    std::cout << DECO_EVENT << std::string(midW, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " " << rpad(locationToString(location), totalW - 2) << " " BOX_V "\n";
-    std::cout << BOX_L << std::string(totalW, BOX_H[0]) << BOX_R "\n";
+    ConsoleUI::PrintSeparator(DECO_EVENT);
 }
 
 void ConsoleUI::ShowPlayerStatsPanel(const Player& player) {
@@ -500,10 +557,13 @@ void ConsoleUI::ShowPlayerStatsPanel(const Player& player) {
 
 void ConsoleUI::ShowExamPanel(const std::string& examName, int score) {
     int totalW = UIModeManager::screenW();
-    std::cout << BOX_TL << std::string(totalW, BOX_H[0]) << BOX_TR "\n";
+    int decoLen = static_cast<int>(visLen(DECO_EXAM));
+    int midW = totalW - decoLen * 2;
+    if (midW < 0) midW = 0;
+    std::cout << DECO_EXAM << std::string(midW, BOX_H[0]) << DECO_EXAM "\n";
     std::cout << BOX_V " " << rpad("Экзамен: " + examName, totalW - 2) << " " BOX_V "\n";
     std::cout << BOX_V " " << rpad("Результат: " + std::to_string(score) + "/100", totalW - 2) << " " BOX_V "\n";
-    std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
+    std::cout << DECO_EXAM << std::string(midW, BOX_H[0]) << DECO_EXAM "\n";
 }
 
 // ---- Animation wrappers ----

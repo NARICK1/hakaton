@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-// Pure ASCII box drawing
+// Pure ASCII box drawing (kept for layouts that must not break)
 #define BOX_H  "="
 #define BOX_V  "|"
 #define BOX_TL "+"
@@ -15,10 +15,18 @@
 #define BOX_R  "+"
 #define BOX_X  "+"
 
-#define BAR_EMPTY "."
-#define BAR_HALF  ":"
-#define BAR_FULL  "#"
-#define BAR_SOLID "#"
+// Decorative symbols for unified visual style
+#define DECO_EVENT   "◆"
+#define DECO_EXAM    "◈"
+#define DECO_ROMANCE "♡"
+#define DECO_CALL    "☎"
+#define DECO_SPECIAL "✦"
+#define DECO_LINE    "═"
+
+#define BAR_EMPTY "░"
+#define BAR_HALF  "▒"
+#define BAR_FULL  "▓"
+#define BAR_SOLID "█"
 
 struct UIPanel {
     int x, y, width, height;
@@ -36,7 +44,7 @@ public:
     static void ClearScreen();
     static void WaitForEnter();
     static int ShowMenu(const std::vector<std::string>& options,
-                        const std::string& prompt = "Ваш выбор");
+                        const std::string& prompt = "");
 
     // Unified screen renderer with auto right panel
     static void RenderScreen(const std::string& sceneTitle,
@@ -56,8 +64,8 @@ public:
     static void ShowExamPanel(const std::string& examName, int score);
 
     // Legacy text helpers
-    static void PrintHeader(const std::string& title);
-    static void PrintSeparator();
+    static void PrintHeader(const std::string& title, const std::string& deco = "");
+    static void PrintSeparator(const std::string& deco = "");
     static void PrintPlayerStats(const Player& player);
     static void PrintDayHeader(int day, const std::string& dayName);
     static void PrintStatus(const Player& player);

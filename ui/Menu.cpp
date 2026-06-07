@@ -19,75 +19,110 @@ void Menu::ShowMainMenu() {
     ConsoleUI::ClearScreen();
     int w = W();
 
-    auto asciiLine = [&](const std::string& text) {
-        size_t vlen = visLen(text);
-        int l = (w - static_cast<int>(vlen)) / 2;
-        if (l < 0) l = 0;
-        int pad = w - l - static_cast<int>(vlen);
-        if (pad < 0) pad = 0;
-        std::cout << BOX_V << std::string(l, ' ') << text
-                  << std::string(pad, ' ') << BOX_V "\n";
+    // ---- Logo block: render outside the box frame ----
+    // Variant A: Unicode (UUST) — always displayed
+    const char* logoUnicode[] = {
+        "██╗   ██╗██╗   ██╗███████╗████████╗",
+        "██║   ██║██║   ██║██╔════╝╚══██╔══╝",
+        "██║   ██║██║   ██║███████╗   ██║",
+        "██║   ██║██║   ██║╚════██║   ██║",
+        "╚██████╔╝╚██████╔╝███████║   ██║",
+        " ╚═════╝  ╚═════╝ ╚══════╝   ╚═╝"
     };
 
-    auto emptyLine = [&]() {
-        std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
+    // Variant B: ASCII fallback (unused by default — swap logo pointer if needed)
+    const char* logoAscii[] = {
+        "##   ## ##   ## ######## ########",
+        "##   ## ##   ## ##    ## ##   ##",
+        "##   ## ##   ## ########    ##",
+        "##   ## ##   ## ##          ##",
+        "##   ## ##   ## ##    ##    ##",
+        " #####   #####  ########    ##"
     };
 
-    // Top border
-    std::cout << BOX_TL << std::string(w, BOX_H[0]) << BOX_TR "\n";
-    emptyLine();
+    // Use Unicode variant by default
+    const char** logo = logoUnicode;
+    const int LOGO_LINES = 6;
 
-    // Animated ASCII logo lines
-    const char* logo[] = {
-        "  _   _ _   _ _   _ ___ _____",
-        " | | | | | | | \\ | |_ _|_   _|",
-        " | | | | | | |  \\| || |  | |",
-        " | |_| | |_| | |\\  || |  | |",
-        "  \\___/ \\___/ |_| \\_|___| |_|"
-    };
-    for (const auto& line : logo) {
-        ConsoleUI::AnimateLogoLine(line, w, 10);
+    // Find max visual width among logo lines
+    int logoMaxW = 0;
+    for (int i = 0; i < LOGO_LINES; i++) {
+        int v = static_cast<int>(visLen(logo[i]));
+        if (v > logoMaxW) logoMaxW = v;
     }
-    sleepMs(40);
-    emptyLine();
 
-    // Title lines
-    ConsoleUI::AnimateLogoLine("UUST / UUNI T", w, 5);
-    sleepMs(30);
-    ConsoleUI::AnimateLogoLine(Lang::get("menu_title"), w, 5);
-    sleepMs(40);
-    emptyLine();
+    // Find max visual width of title
+    int titleW = static_cast<int>(visLen(Lang::get("menu_title")));
 
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
-    emptyLine();
+    // Block width = max(logo width, title width)
+    int blockW = (logoMaxW > titleW) ? logoMaxW : titleW;
+
+    // One fixed left pad for the entire block
+    int blockPad = (w - blockW) / 2;
+    if (blockPad < 0) blockPad = 0;
+
+    // Logo top spacing
+    for (int i = 0; i < 2; i++) std::cout << "\n";
+
+    // Print logo as a single block with fixed left padding
+    for (int i = 0; i < LOGO_LINES; i++) {
+        int lineW = static_cast<int>(visLen(logo[i]));
+        int rightPad = blockW - lineW;
+        if (rightPad < 0) rightPad = 0;
+        std::cout << std::string(blockPad, ' ') << logo[i]
+                  << std::string(rightPad, ' ');
+        // Animate each line with a small delay
+        sleepMs(15);
+        std::cout << "\n";
+    }
+    sleepMs(80);
+
+    // Title: same left pad as the logo block
+    int titleLineW = static_cast<int>(visLen(Lang::get("menu_title")));
+    int titleRightPad = blockW - titleLineW;
+    if (titleRightPad < 0) titleRightPad = 0;
+    std::cout << std::string(blockPad, ' ') << Lang::get("menu_title")
+              << std::string(titleRightPad, ' ') << "\n";
+    sleepMs(40);
+
+    // Logo bottom spacing
+    std::cout << "\n";
+
+    // ---- Menu box frame (decorative) ----
+    std::string d = DECO_EVENT;
+    int dLen = static_cast<int>(visLen(d));
+    int midW = w - dLen * 2;
+    if (midW < 0) midW = 0;
+
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
 
     // Welcome messages
     std::cout << BOX_V " " << rpad(Lang::get("menu_welcome"), w - 2) << " " BOX_V "\n";
     std::cout << BOX_V " " << rpad(Lang::get("menu_welcome2"), w - 2) << " " BOX_V "\n";
     std::cout << BOX_V " " << rpad(Lang::get("menu_welcome3"), w - 2) << " " BOX_V "\n";
-    emptyLine();
+    std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
 
-    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
-    emptyLine();
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
+    std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
 
     // Menu items with animation
-    std::vector<std::string> menuLines;
     std::string items[] = {
         Lang::get("menu_new_game"),
         Lang::get("menu_load_game"),
         Lang::get("menu_controls"),
         Lang::get("menu_settings"),
-        "Режим разработчика",
+        Lang::get("menu_debug"),
+        Lang::get("menu_credits"),
         Lang::get("menu_exit")
     };
-    int nums[] = {1, 2, 3, 4, 5, 0};
-    for (int i = 0; i < 6; i++) {
+    int nums[] = {1, 2, 3, 4, 5, 6, 0};
+    for (int i = 0; i < 7; i++) {
         std::string line = "    [" + std::to_string(nums[i]) + "] " + items[i];
         std::cout << BOX_V " " << rpad(line, w - 2) << " " BOX_V "\n";
         sleepMs(50);
     }
-    emptyLine();
-    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
+    std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
 }
 
 int Menu::MainMenuChoice() {
@@ -102,16 +137,21 @@ int Menu::MainMenuChoice() {
 void Menu::ShowGameOverMenu(const std::string& endingText) {
     ConsoleUI::ClearScreen();
     std::cout << endingText << "\n";
-    ConsoleUI::PrintSeparator();
+    ConsoleUI::PrintSeparator(DECO_SPECIAL);
     std::cout << BOX_V " 1. " << Lang::get("menu_restart") << "\n";
     std::cout << BOX_V " 2. " << Lang::get("menu_back") << "\n";
     std::cout << BOX_V " 0. " << Lang::get("menu_exit") << "\n";
-    std::cout << BOX_BL << std::string(W(), BOX_H[0]) << BOX_BR "\n";
+    int ww = W();
+    std::string d = DECO_SPECIAL;
+    int dl = static_cast<int>(visLen(d));
+    int mw = ww - dl * 2;
+    if (mw < 0) mw = 0;
+    std::cout << d << std::string(mw, BOX_H[0]) << d << "\n";
 }
 
 void Menu::ShowControls() {
     ConsoleUI::ClearScreen();
-    ConsoleUI::PrintHeader(Lang::get("ctrl_title"));
+    ConsoleUI::PrintHeader(Lang::get("ctrl_title"), DECO_EVENT);
     int w = W();
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
     std::cout << BOX_V "  " << rpad(Lang::get("ctrl_text1"), w - 4) << "  " BOX_V "\n";
@@ -130,13 +170,17 @@ void Menu::ShowControls() {
     std::cout << BOX_V "  - " << rpad(Lang::get("ctrl_end2"), w - 6) << "  " BOX_V "\n";
     std::cout << BOX_V "  - " << rpad(Lang::get("ctrl_end3"), w - 6) << "  " BOX_V "\n";
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    std::string d2 = DECO_EVENT;
+    int dl2 = static_cast<int>(visLen(d2));
+    int mw2 = w - dl2 * 2;
+    if (mw2 < 0) mw2 = 0;
+    std::cout << d2 << std::string(mw2, BOX_H[0]) << d2 << "\n";
     ConsoleUI::WaitForEnter();
 }
 
 void Menu::ShowSettings() {
     ConsoleUI::ClearScreen();
-    ConsoleUI::PrintHeader(Lang::get("set_title"));
+    ConsoleUI::PrintHeader(Lang::get("set_title"), DECO_EVENT);
     int w = W();
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
     std::cout << BOX_V "  " << rpad(Lang::get("menu_profile") + ": "
@@ -155,7 +199,11 @@ void Menu::ShowSettings() {
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
     std::cout << BOX_V "  " << rpad("0. " + Lang::get("menu_back_title"), w - 4) << "  " BOX_V "\n";
     std::cout << BOX_V << std::string(w, ' ') << BOX_V "\n";
-    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    std::string d3 = DECO_EVENT;
+    int dl3 = static_cast<int>(visLen(d3));
+    int mw3 = w - dl3 * 2;
+    if (mw3 < 0) mw3 = 0;
+    std::cout << d3 << std::string(mw3, BOX_H[0]) << d3 << "\n";
     std::cout << " " << Lang::get("ui_your_choice") << ": " << std::flush;
     int ch;
     std::cin >> ch;

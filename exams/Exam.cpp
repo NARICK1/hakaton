@@ -15,9 +15,9 @@ int Exam::evaluateAnswers(const std::vector<int>& answers) const {
 }
 
 void Exam::displayQuestions() const {
-    ConsoleUI::PrintHeader("ЭКЗАМЕН: " + name);
-    std::cout << "Преподаватель: " << teacherName << "\n";
-    std::cout << "Количество вопросов: " << questions.size() << "\n\n";
+    ConsoleUI::PrintHeader("ЭКЗАМЕН: " + name, DECO_EXAM);
+    std::cout << " Преподаватель: " << teacherName << "\n";
+    std::cout << " Количество вопросов: " << questions.size() << "\n\n";
 }
 
 int Exam::askQuestionsConsole(Player& player) const {
@@ -26,7 +26,7 @@ int Exam::askQuestionsConsole(Player& player) const {
 
     for (int i = 0; i < totalQuestions; i++) {
         const auto& q = questions[i];
-        ConsoleUI::PrintSeparator();
+        ConsoleUI::PrintSeparator(DECO_EXAM);
         std::cout << "Вопрос " << (i + 1) << "/" << totalQuestions << ":\n";
         std::cout << q.question << "\n\n";
 
@@ -74,7 +74,7 @@ int Exam::askQuestionsConsole(Player& player) const {
         }
     }
 
-    ConsoleUI::PrintSeparator();
+    ConsoleUI::PrintSeparator(DECO_EXAM);
     std::cout << "Результат: " << correctCount << " из " << totalQuestions << " правильных.\n";
 
     int bonus = player.getStats().intellect / 10;

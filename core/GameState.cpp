@@ -12,6 +12,18 @@ std::string GameState::serialize() const {
     oss << "---NPC_MEMORY---\n";
     oss << npcMemoryData.size() << "\n";
     oss << npcMemoryData;
+    oss << "\n---JOURNAL---\n";
+    oss << journalData.size() << "\n";
+    oss << journalData;
+    oss << "\n---ENCYCLOPEDIA---\n";
+    oss << encyclopediaData.size() << "\n";
+    oss << encyclopediaData;
+    oss << "\n---ACHIEVEMENTS---\n";
+    oss << achievementsData.size() << "\n";
+    oss << achievementsData;
+    oss << "\n---HABITS---\n";
+    oss << habitsData.size() << "\n";
+    oss << habitsData;
     oss << "\n---END---\n";
     return oss.str();
 }
@@ -58,13 +70,37 @@ bool GameState::deserialize(const std::string& data) {
     if (npcSectionFound) {
         size_t memSize;
         if (iss >> memSize) {
-            iss.ignore(); // skip newline
+            iss.ignore();
             if (memSize > 0) {
                 npcMemoryData.resize(memSize);
                 iss.read(&npcMemoryData[0], memSize);
             }
         }
     }
+
+    // Read remaining sections using helper
+    auto readSection = [&](std::string& target, const std::string& marker) {
+        std::string line;
+        while (std::getline(iss, line)) {
+            if (line == marker) {
+                size_t sz;
+                if (iss >> sz) {
+                    iss.ignore();
+                    if (sz > 0) {
+                        target.resize(sz);
+                        iss.read(&target[0], sz);
+                    }
+                }
+                return true;
+            }
+        }
+        return false;
+    };
+
+    readSection(journalData, "---JOURNAL---");
+    readSection(encyclopediaData, "---ENCYCLOPEDIA---");
+    readSection(achievementsData, "---ACHIEVEMENTS---");
+    readSection(habitsData, "---HABITS---");
 
     return true;
 }

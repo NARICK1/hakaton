@@ -3,6 +3,7 @@
 #include <algorithm>
 
 struct Stats {
+    // Основные параметры
     int intellect = GameConstants::START_INTELLECT;
     int energy = GameConstants::START_ENERGY;
     int fatigue = GameConstants::START_FATIGUE;
@@ -12,6 +13,13 @@ struct Stats {
     int money = GameConstants::START_MONEY;
     int romance = GameConstants::START_ROMANCE;
     int health = 100;
+
+    // Скрытые параметры
+    int confidence = 50;     // уверенность
+    int burnout = 10;        // выгорание
+    int motivation = 50;     // мотивация
+    int anxiety = 30;        // тревожность
+    int selfEsteem = 50;     // самооценка
 
     void clampAll() {
         intellect = std::clamp(intellect, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
@@ -23,6 +31,11 @@ struct Stats {
         money = std::clamp(money, 0, GameConstants::MAX_MONEY);
         romance = std::clamp(romance, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
         health = std::clamp(health, 0, GameConstants::MAX_STAT);
+        confidence = std::clamp(confidence, 0, 100);
+        burnout = std::clamp(burnout, 0, 100);
+        motivation = std::clamp(motivation, 0, 100);
+        anxiety = std::clamp(anxiety, 0, 100);
+        selfEsteem = std::clamp(selfEsteem, 0, 100);
     }
 
     bool isAlive() const { return health > 0 && hunger < GameConstants::MAX_HUNGER; }
