@@ -6,6 +6,7 @@
 #include "../save/SaveManager.h"
 #include <memory>
 #include <map>
+#include <string>
 
 class Game {
 private:
@@ -30,6 +31,9 @@ private:
     void runDay6();
     void runDay7();
     void runDay8();
+
+    // Еда дома утром / вечером
+    void offerHomeMeal(const std::string& title, bool beforeSleep);
 
     // Системы локаций
     void handleLocation(LocationID loc);

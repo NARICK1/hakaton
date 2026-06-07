@@ -11,6 +11,7 @@
 #include "../data/Lang.h"
 #include <iostream>
 #include <sstream>
+#include <algorithm>
 
 Game::Game() {
     ConsoleUI::SetConsoleUTF8();
@@ -42,11 +43,13 @@ void Game::run() {
         switch (state.getPhase()) {
         case GamePhase::MainMenu:
             Menu::ShowMainMenu();
+
             switch (Menu::MainMenuChoice()) {
             case 1:
                 initGame();
                 runPrologue();
                 break;
+
             case 2:
                 initNPCs();
                 loadGame();
@@ -54,60 +57,107 @@ void Game::run() {
                     state.setPhase(GamePhase::Playing);
                 }
                 break;
+
             case 3:
                 Menu::ShowControls();
                 break;
+
             case 4:
                 Menu::ShowSettings();
                 break;
+
             case 5:
                 DevMode::ShowDevMenu();
                 break;
+
             case 0:
                 running = false;
                 break;
             }
+
             break;
 
         case GamePhase::Playing: {
             int day = state.getPlayer().getCurrentDay();
 
+            // Утро дома: можно поесть после пробуждения.
+            if (day >= 1 && day <= GameConstants::TOTAL_DAYS) {
+                offerHomeMeal("УТРО ДОМА", false);
+                applyDailySystems();
+                checkGameOver();
+
+                if (state.getPhase() != GamePhase::Playing) {
+                    break;
+                }
+            }
+
             switch (day) {
-            case 1: runDay1(); break;
-            case 2: runDay2(); break;
-            case 3: runDay3(); break;
-            case 4: runDay4(); break;
-            case 5: runDay5(); break;
-            case 6: runDay6(); break;
-            case 7: runDay7(); break;
-            case 8: runDay8(); break;
-            default:
+            case 1:
+                runDay1();
+                break;
+            case 2:
+                runDay2();
+                break;
+            case 3:
+                runDay3();
+                break;
+            case 4:
+                runDay4();
+                break;
+            case 5:
+                runDay5();
+                break;
+            case 6:
+                runDay6();
+                break;
+            case 7:
+                runDay7();
+                break;
+            case 8:
+                runDay8();
+                break;
+
+            default: {
                 auto ending = EndingSystem::EvaluateEnding(state.getPlayer());
                 state.setGameOverReason(ending);
                 state.setPhase(GamePhase::GameOver);
                 break;
             }
+            }
 
             checkGameOver();
+
+            // Вечер дома: можно поесть перед сном.
+            // На 8-й день не спрашиваем, потому что после него уже финал.
+            if (state.getPhase() == GamePhase::Playing && day < GameConstants::TOTAL_DAYS) {
+                offerHomeMeal("ВЕЧЕР ДОМА", true);
+                applyDailySystems();
+                checkGameOver();
+            }
 
             if (state.getPhase() == GamePhase::Playing) {
                 state.getPlayer().nextDay();
                 applyDailySystems();
                 saveGame();
             }
+
             break;
         }
 
         case GamePhase::GameOver: {
             Menu::ShowGameOverMenu(
-                EndingSystem::GetEndingText(state.getGameOverReason()));
+                EndingSystem::GetEndingText(state.getGameOverReason())
+            );
+
             int choice = Menu::MainMenuChoice();
+
             if (choice == 1) {
                 initGame();
                 runPrologue();
             } else if (choice == 2 || choice == 0) {
                 state.setPhase(GamePhase::MainMenu);
             }
+
             break;
         }
 
@@ -130,6 +180,87 @@ void Game::checkGameOver() {
         state.setPhase(GamePhase::GameOver);
     }
 }
+
+void Game::offerHomeMeal(const std::string& title, bool beforeSleep) {
+    Player& player = state.getPlayer();
+    auto& stats = player.getStats();
+
+    player.setLocation(LocationID::Home);
+
+    std::string text;
+
+    if (beforeSleep) {
+        text =
+            "Ты вернулся домой перед сном.\n"
+            "Сытость сейчас: " + std::to_string(stats.hunger) + "/100.\n"
+            "Можно поесть за деньги, чтобы не проснуться голодным.";
+    } else {
+        text =
+            "Ты проснулся дома.\n"
+            "Сытость сейчас: " + std::to_string(stats.hunger) + "/100.\n"
+            "Можно поесть перед тем, как идти по делам.";
+    }
+
+    ConsoleUI::RenderScreen(
+        title,
+        text,
+        {
+            "Поесть дома (-" + std::to_string(GameConstants::EAT_MONEY_COST) +
+                " руб, +" + std::to_string(GameConstants::EAT_HUNGER_RESTORE) +
+                " сытости)",
+            "Не есть"
+        },
+        player,
+        "",
+        "",
+        "Дом"
+    );
+
+    int choice;
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
+
+    if (choice == 1) {
+        if (stats.hunger >= GameConstants::MAX_HUNGER) {
+            ConsoleUI::RenderScreen(
+                "ЕДА",
+                "Ты и так полностью сыт. Есть сейчас нет смысла.",
+                {},
+                player,
+                "",
+                "",
+                "Дом"
+            );
+        } else if (stats.money < GameConstants::EAT_MONEY_COST) {
+            ConsoleUI::RenderScreen(
+                "ЕДА",
+                "Не хватает денег на еду.",
+                {},
+                player,
+                "",
+                "",
+                "Дом"
+            );
+        } else {
+            HungerSystem::Eat(player, GameConstants::EAT_MONEY_COST);
+
+            ConsoleUI::RenderScreen(
+                "ЕДА",
+                "Ты поел дома.\n"
+                "Сытость восстановлена до " + std::to_string(player.getStats().hunger) + "/100.\n"
+                "Деньги: " + std::to_string(player.getStats().money) + " руб.",
+                {},
+                player,
+                "",
+                "",
+                "Дом"
+            );
+        }
+
+        ConsoleUI::WaitForEnter();
+    }
+}
+
 
 void Game::saveGame() {
     // Serialize NPC memory into state
@@ -1357,36 +1488,119 @@ void Game::handleLocation(LocationID loc) {
 void Game::handleHomeLocation() {
     ConsoleUI::PrintHeader("ДОМ");
     ConsoleUI::ShowLocationArt(LocationID::Home);
-    ConsoleUI::RenderScreen("ДОМ", "Ты дома. Можно отдохнуть.",
-        {"Лечь спать", "Поесть", "Позаниматься"},
-        state.getPlayer());
+
+    ConsoleUI::RenderScreen(
+        "ДОМ",
+        "Ты дома. Можно отдохнуть, поесть или позаниматься.",
+        {
+            "Лечь спать",
+            "Поесть",
+            "Позаниматься"
+        },
+        state.getPlayer(),
+        "",
+        "",
+        "Дом"
+    );
 
     int choice;
     std::cin >> choice;
     std::cin.ignore(10000, '\n');
 
     auto& s = state.getPlayer().getStats();
+
     switch (choice) {
     case 1:
         s.energy += GameConstants::SLEEP_ENERGY_GAIN;
         s.fatigue -= GameConstants::SLEEP_FATIGUE_REDUCE;
         s.stress -= GameConstants::SLEEP_STRESS_REDUCE;
-        s.hunger += GameConstants::SLEEP_HUNGER_INCREASE;
+
+        // Сон тратит сытость.
+        s.hunger -= GameConstants::SLEEP_HUNGER_LOSS;
+
         state.getPlayer().advanceTime(480);
-        ConsoleUI::RenderScreen("СОН", "Ты хорошо выспался.", {}, state.getPlayer());
+
+        ConsoleUI::RenderScreen(
+            "СОН",
+            "Ты хорошо выспался.\n"
+            "За время сна сытость немного снизилась.",
+            {},
+            state.getPlayer(),
+            "",
+            "",
+            "Дом"
+        );
         break;
+
     case 2:
-        HungerSystem::Eat(state.getPlayer(), GameConstants::EAT_MONEY_COST);
-        ConsoleUI::RenderScreen("ЕДА", "Ты поел.", {}, state.getPlayer());
+        if (s.hunger >= GameConstants::MAX_HUNGER) {
+            ConsoleUI::RenderScreen(
+                "ЕДА",
+                "Ты и так полностью сыт.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Дом"
+            );
+        } else if (s.money < GameConstants::EAT_MONEY_COST) {
+            ConsoleUI::RenderScreen(
+                "ЕДА",
+                "Не хватает денег на еду.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Дом"
+            );
+        } else {
+            HungerSystem::Eat(state.getPlayer(), GameConstants::EAT_MONEY_COST);
+
+            ConsoleUI::RenderScreen(
+                "ЕДА",
+                "Ты поел.\n"
+                "Сытость: " + std::to_string(state.getPlayer().getStats().hunger) + "/100.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Дом"
+            );
+        }
         break;
+
     case 3:
         s.intellect += GameConstants::STUDY_INTELLECT_GAIN;
         s.fatigue += GameConstants::STUDY_FATIGUE_COST;
         s.energy -= GameConstants::STUDY_ENERGY_COST;
+
         state.getPlayer().advanceTime(120);
-        ConsoleUI::RenderScreen("ЗАНЯТИЯ", "Ты позанимался.", {}, state.getPlayer());
+
+        ConsoleUI::RenderScreen(
+            "ЗАНЯТИЯ",
+            "Ты позанимался.\n"
+            "Интеллект вырос, но ты устал.",
+            {},
+            state.getPlayer(),
+            "",
+            "",
+            "Дом"
+        );
+        break;
+
+    default:
+        ConsoleUI::RenderScreen(
+            "ДОМ",
+            "Ты ничего не сделал.",
+            {},
+            state.getPlayer(),
+            "",
+            "",
+            "Дом"
+        );
         break;
     }
+
     s.clampAll();
     ConsoleUI::WaitForEnter();
 }
@@ -1445,41 +1659,112 @@ void Game::handleStreetLocation() {
 void Game::handleCanteenLocation() {
     ConsoleUI::PrintHeader("СТОЛОВАЯ");
     ConsoleUI::ShowLocationArt(LocationID::Canteen);
-    ConsoleUI::RenderScreen("СТОЛОВАЯ", "Что будешь заказывать?",
-        {"Комплексный обед (150 руб)", "Чай с булочкой (50 руб)", "Ничего, просто посидеть"},
-        state.getPlayer());
+
+    ConsoleUI::RenderScreen(
+        "СТОЛОВАЯ",
+        "Что будешь заказывать?",
+        {
+            "Комплексный обед (150 руб, +50 сытости)",
+            "Чай с булочкой (50 руб, +20 сытости)",
+            "Ничего, просто посидеть"
+        },
+        state.getPlayer(),
+        "",
+        "",
+        "Столовая"
+    );
 
     int choice;
     std::cin >> choice;
     std::cin.ignore(10000, '\n');
 
     auto& s = state.getPlayer().getStats();
+
     switch (choice) {
     case 1:
         if (s.money >= 150) {
             s.money -= 150;
-            s.hunger = std::max(0, s.hunger - 50);
+            s.hunger = std::min(GameConstants::MAX_HUNGER, s.hunger + 50);
             s.energy += 15;
-            ConsoleUI::RenderScreen("ОБЕД", "Вкусный обед!", {}, state.getPlayer());
+
+            ConsoleUI::RenderScreen(
+                "ОБЕД",
+                "Вкусный обед!\n"
+                "Сытость восстановлена.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Столовая"
+            );
         } else {
-            ConsoleUI::RenderScreen("ОБЕД", "Не хватает денег.", {}, state.getPlayer());
+            ConsoleUI::RenderScreen(
+                "ОБЕД",
+                "Не хватает денег.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Столовая"
+            );
         }
         break;
+
     case 2:
         if (s.money >= 50) {
             s.money -= 50;
-            s.hunger = std::max(0, s.hunger - 20);
+            s.hunger = std::min(GameConstants::MAX_HUNGER, s.hunger + 20);
             s.energy += 5;
-            ConsoleUI::RenderScreen("ПЕРЕКУС", "Чай с булочкой — отлично.", {}, state.getPlayer());
+
+            ConsoleUI::RenderScreen(
+                "ПЕРЕКУС",
+                "Чай с булочкой — отлично.\n"
+                "Сытость немного восстановлена.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Столовая"
+            );
         } else {
-            ConsoleUI::RenderScreen("ПЕРЕКУС", "Не хватает денег.", {}, state.getPlayer());
+            ConsoleUI::RenderScreen(
+                "ПЕРЕКУС",
+                "Не хватает денег.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Столовая"
+            );
         }
         break;
+
     case 3:
-        ConsoleUI::RenderScreen("ОТДЫХ", "Ты просто отдыхаешь.", {}, state.getPlayer());
+        ConsoleUI::RenderScreen(
+            "ОТДЫХ",
+            "Ты просто отдыхаешь.",
+            {},
+            state.getPlayer(),
+            "",
+            "",
+            "Столовая"
+        );
         s.stress -= 3;
         break;
+
+    default:
+        ConsoleUI::RenderScreen(
+            "СТОЛОВАЯ",
+            "Ты ничего не заказал.",
+            {},
+            state.getPlayer(),
+            "",
+            "",
+            "Столовая"
+        );
+        break;
     }
+
     state.getPlayer().advanceTime(30);
     s.clampAll();
     ConsoleUI::WaitForEnter();
@@ -1488,44 +1773,137 @@ void Game::handleCanteenLocation() {
 void Game::handleShopLocation() {
     ConsoleUI::PrintHeader("МАГАЗИН");
     ConsoleUI::ShowLocationArt(LocationID::Shop);
-    ConsoleUI::RenderScreen("МАГАЗИН", "Что купить?",
-        {"Продукты (200 руб)", "Канцтовары (100 руб)", "Книгу по C++ (300 руб)", "Выйти"},
-        state.getPlayer());
+
+    ConsoleUI::RenderScreen(
+        "МАГАЗИН",
+        "Что купить?",
+        {
+            "Продукты (200 руб, +30 сытости)",
+            "Канцтовары (100 руб, +2 интеллект)",
+            "Книгу по C++ (300 руб, +8 интеллект)",
+            "Выйти"
+        },
+        state.getPlayer(),
+        "",
+        "",
+        "Магазин"
+    );
 
     int choice;
     std::cin >> choice;
     std::cin.ignore(10000, '\n');
 
     auto& s = state.getPlayer().getStats();
+
     switch (choice) {
     case 1:
         if (s.money >= 200) {
             s.money -= 200;
-            s.hunger = std::max(0, s.hunger - 30);
-            ConsoleUI::RenderScreen("ПОКУПКА", "Купил продукты.", {}, state.getPlayer());
+            s.hunger = std::min(GameConstants::MAX_HUNGER, s.hunger + 30);
+
+            ConsoleUI::RenderScreen(
+                "ПОКУПКА",
+                "Купил продукты.\n"
+                "Сытость немного восстановлена.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Магазин"
+            );
         } else {
-            ConsoleUI::RenderScreen("ПОКУПКА", "Не хватает денег.", {}, state.getPlayer());
+            ConsoleUI::RenderScreen(
+                "ПОКУПКА",
+                "Не хватает денег.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Магазин"
+            );
         }
         break;
+
     case 2:
         if (s.money >= 100) {
             s.money -= 100;
             s.intellect += 2;
-            ConsoleUI::RenderScreen("ПОКУПКА", "Купил канцтовары.", {}, state.getPlayer());
+
+            ConsoleUI::RenderScreen(
+                "ПОКУПКА",
+                "Купил канцтовары.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Магазин"
+            );
         } else {
-            ConsoleUI::RenderScreen("ПОКУПКА", "Не хватает денег.", {}, state.getPlayer());
+            ConsoleUI::RenderScreen(
+                "ПОКУПКА",
+                "Не хватает денег.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Магазин"
+            );
         }
         break;
+
     case 3:
         if (s.money >= 300) {
             s.money -= 300;
             s.intellect += 8;
-            ConsoleUI::RenderScreen("ПОКУПКА", "Купил книгу по C++. Теперь ты гуру!", {}, state.getPlayer());
+
+            ConsoleUI::RenderScreen(
+                "ПОКУПКА",
+                "Купил книгу по C++.\n"
+                "Теперь ты почти гуру.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Магазин"
+            );
         } else {
-            ConsoleUI::RenderScreen("ПОКУПКА", "Не хватает денег.", {}, state.getPlayer());
+            ConsoleUI::RenderScreen(
+                "ПОКУПКА",
+                "Не хватает денег.",
+                {},
+                state.getPlayer(),
+                "",
+                "",
+                "Магазин"
+            );
         }
         break;
+
+    case 4:
+        ConsoleUI::RenderScreen(
+            "МАГАЗИН",
+            "Ты вышел из магазина.",
+            {},
+            state.getPlayer(),
+            "",
+            "",
+            "Магазин"
+        );
+        break;
+
+    default:
+        ConsoleUI::RenderScreen(
+            "МАГАЗИН",
+            "Ты ничего не купил.",
+            {},
+            state.getPlayer(),
+            "",
+            "",
+            "Магазин"
+        );
+        break;
     }
+
     state.getPlayer().advanceTime(20);
     s.clampAll();
     ConsoleUI::WaitForEnter();

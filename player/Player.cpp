@@ -36,24 +36,31 @@ void Player::nextDay() {
     stats.money += GameConstants::MONEY_PER_DAY_SCHOLARSHIP;
 
     // Ежедневные изменения статов
-    stats.hunger += 15;
+    // hunger теперь сытость, поэтому она УМЕНЬШАЕТСЯ
+    stats.hunger -= GameConstants::DAY_HUNGER_LOSS;
     stats.fatigue += 5;
     stats.stress += 3;
+
     stats.clampAll();
 }
 
 void Player::advanceTime(int minutes) {
     currentMinute += minutes;
+
     while (currentMinute >= GameConstants::MINUTES_PER_HOUR) {
         currentMinute -= GameConstants::MINUTES_PER_HOUR;
         currentHour++;
     }
+
     if (currentHour >= GameConstants::HOURS_PER_DAY) {
         currentHour -= GameConstants::HOURS_PER_DAY;
         nextDay();
     }
-    stats.hunger += minutes / 30;
+
+    // За каждые 30 минут сытость понемногу падает
+    stats.hunger -= (minutes / 30) * GameConstants::TIME_HUNGER_LOSS_PER_30_MIN;
     stats.fatigue += minutes / 60;
+
     stats.clampAll();
 }
 
@@ -111,22 +118,27 @@ void Player::applyBuffs() {
     if (hasBuff(BuffType::ImposterSyndrome)) {
         stats.intellect = static_cast<int>(stats.intellect * 0.8);
     }
-    // Выгорание: энергия восстанавливается вдвое медленнее
+
+    // Выгорание: энергия не может быть выше 50
     if (hasBuff(BuffType::Burnout)) {
         stats.energy = std::min(stats.energy, 50);
     }
+
     // Разбитое сердце: стресс постоянно растёт
     if (hasBuff(BuffType::BrokenHeart)) {
         stats.stress += 2;
     }
-    // Сонный паралич: энергия снижается быстрее
+
+    // Сонный паралич: усталость растёт быстрее
     if (hasBuff(BuffType::SleepParalysis)) {
         stats.fatigue += 5;
     }
+
     // Голодание: здоровье падает
     if (hasBuff(BuffType::Starvation)) {
         stats.health = std::max(0, stats.health - 3);
     }
+
     stats.clampAll();
 }
 
@@ -220,5 +232,6 @@ bool Player::deserialize(const std::string& data) {
         activeBuffs.push_back(static_cast<BuffType>(b));
     }
 
+    stats.clampAll();
     return true;
 }

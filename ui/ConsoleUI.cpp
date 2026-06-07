@@ -100,13 +100,14 @@ void ConsoleUI::ClearScreen() {
 
 void ConsoleUI::WaitForEnter() {
     int totalW = UIModeManager::screenW();
+
     std::cout << "\n"
               << BOX_V " " << Lang::get("ui_press_enter") << "\n"
               << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
-    std::cin.ignore(10000, '\n');
-    std::cin.get();
-}
 
+    std::string dummy;
+    std::getline(std::cin, dummy);
+}
 int ConsoleUI::ShowMenu(const std::vector<std::string>& options,
                          const std::string& prompt) {
     int totalW = UIModeManager::screenW();
@@ -162,9 +163,7 @@ std::string ConsoleUI::MakeTopBar(const Player& player) {
 
 std::string ConsoleUI::MakeStatBar(const Player& player) {
     const auto& s = player.getStats();
-    int totalW = UIModeManager::screenW();
 
-    // Labels: ИНТ ЭН УСТ ГОЛ СТР РУБ (for Russian) / INT EN FAT HUN STR RUB (for English)
     std::string il = Lang::get("hud_int");
     std::string el = Lang::get("hud_en");
     std::string fl = Lang::get("hud_fat");
@@ -179,16 +178,20 @@ std::string ConsoleUI::MakeStatBar(const Player& player) {
        << " " << hl << ":" << s.hunger
        << " " << sl << ":" << s.stress
        << " " << ml << ":" << s.money;
+
     std::string text = ss.str();
 
-    // All bars same length (12)
     std::string bars = " ["
         + MakeBarString(s.intellect, GameConstants::MAX_STAT, 12) + "]"
         + "[" + MakeBarString(s.energy, GameConstants::MAX_STAT, 12) + "]"
         + "[" + MakeBarString(100 - s.fatigue, 100, 12) + "]"
-        + "[" + MakeBarString(100 - s.hunger, 100, 12) + "]"
+
+        // hunger теперь сытость, поэтому НЕ надо делать 100 - hunger
+        + "[" + MakeBarString(s.hunger, GameConstants::MAX_HUNGER, 12) + "]"
+
         + "[" + MakeBarString(100 - s.stress, 100, 12) + "]"
         + "[" + MakeBarString(s.money, 5000, 12) + "]";
+
     return text + "  " + bars;
 }
 
@@ -223,13 +226,17 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     std::vector<std::string> rpLines;
     std::istringstream rpStream(rpContent);
     std::string line;
+
     while (std::getline(rpStream, line)) {
         rpLines.push_back(line);
     }
 
     // Wrap story text
     std::vector<std::string> storyLines = wordWrap(mainText, mainW);
-    if (storyLines.empty()) storyLines.push_back("");
+
+    if (storyLines.empty()) {
+        storyLines.push_back("");
+    }
 
     // Determine rows from profile
     int storyRows = std::min(UIModeManager::storyRows(), static_cast<int>(storyLines.size()));
@@ -240,10 +247,14 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     std::cout << BOX_TL << std::string(totalW, BOX_H[0]) << BOX_TR "\n";
 
     // ---- HUD SECTION ----
-    // Scene title / day name centered
     std::string title = " " + sceneTitle + " ";
     int tLen = static_cast<int>(visLen(title));
     int lPad = (totalW - tLen) / 2;
+
+    if (lPad < 0) {
+        lPad = 0;
+    }
+
     std::cout << BOX_V << rpad(std::string(lPad, ' ') + title, totalW) << BOX_V "\n";
     std::cout << BOX_L << std::string(totalW, BOX_H[0]) << BOX_R "\n";
 
@@ -264,14 +275,22 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
 
     for (int i = 0; i < maxContentRows; i++) {
         std::string leftPart = i < static_cast<int>(storyLines.size())
-            ? storyLines[i] : "";
+            ? storyLines[i]
+            : "";
+
         leftPart = rpad(leftPart, mainW);
 
         std::string rightPart = i < static_cast<int>(rpLines.size())
-            ? rpLines[i] : "";
+            ? rpLines[i]
+            : "";
+
         rightPart = rpad(rightPart, rpW);
 
-        std::cout << BOX_V " " << leftPart << " " BOX_V " " << rightPart << BOX_V "\n";
+        std::cout << BOX_V " "
+                  << leftPart
+                  << " " BOX_V " "
+                  << rightPart
+                  << BOX_V "\n";
     }
 
     // Dialog separator
@@ -279,18 +298,16 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
 
     // ---- DIALOG SECTION ----
     if (remainingLines > 0) {
-        // NPC name in dialog (extract from last story line if starts with special marker)
-        std::string dialogHeader;
         int startIdx = static_cast<int>(storyLines.size()) - remainingLines;
 
-        // If sceneNPC is set, show NPC name as dialog header
         if (!sceneNPC.empty()) {
-            dialogHeader = sceneNPC;
+            std::string dialogHeader = sceneNPC;
             std::cout << BOX_V << rpad(" " + dialogHeader, totalW) << BOX_V "\n";
             std::cout << BOX_L << std::string(totalW, BOX_H[0]) << BOX_R "\n";
         }
 
         int dialogLines = std::min(remainingLines, 3);
+
         for (int i = 0; i < dialogLines; i++) {
             std::string dl = storyLines[startIdx + i];
             std::cout << BOX_V << rpad(" " + dl, totalW) << BOX_V "\n";
@@ -305,18 +322,26 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
     // ---- CHOICES SECTION ----
     for (size_t i = 0; i < choices.size(); i++) {
         std::string ch = std::to_string(i + 1) + ". " + choices[i];
-        if (visLen(ch) > static_cast<size_t>(totalW))
+
+        if (visLen(ch) > static_cast<size_t>(totalW)) {
             ch = ch.substr(0, static_cast<size_t>(totalW));
+        }
+
         std::cout << BOX_V << rpad(" " + ch, totalW) << BOX_V "\n";
     }
 
-    // Bottom frame + prompt
-    std::string prompt = " " + Lang::get("ui_your_choice") + " [1-"
-                       + std::to_string(choices.size()) + "]: ";
+    // Bottom frame
     std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
-    std::cout << BOX_V << rpad(prompt, totalW) << BOX_V "\n";
-    std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
-    std::cout << "> ";
+
+    // Если вариантов выбора нет — НЕ печатаем "Ваш выбор [1-0]"
+    if (!choices.empty()) {
+        std::string prompt = " " + Lang::get("ui_your_choice") + " [1-"
+            + std::to_string(choices.size()) + "]: ";
+
+        std::cout << BOX_V << rpad(prompt, totalW) << BOX_V "\n";
+        std::cout << BOX_BL << std::string(totalW, BOX_H[0]) << BOX_BR "\n";
+        std::cout << "> ";
+    }
 }
 
 // ---- Auto Right Panel ----
@@ -324,8 +349,10 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
 std::string ConsoleUI::AutoRightPanel(const Player& player,
                                        const std::string& npcName,
                                        const std::string& locationName,
-                                       bool isExam, bool isRain,
-                                       bool isEnding, bool endingSuccess) {
+                                       bool isExam,
+                                       bool isRain,
+                                       bool isEnding,
+                                       bool endingSuccess) {
     std::string art;
     int rpW = UIModeManager::rpW();
 
@@ -339,41 +366,53 @@ std::string ConsoleUI::AutoRightPanel(const Player& player,
         art = AsciiArt::GetRain();
     } else if (!locationName.empty()) {
         std::string ln = lc(locationName);
-        if (ln.find("home") != std::string::npos || ln.find("дом") != std::string::npos)
+
+        if (ln.find("home") != std::string::npos || ln.find("дом") != std::string::npos) {
             art = AsciiArt::GetHome();
-        else if (ln.find("univers") != std::string::npos || ln.find("универ") != std::string::npos)
+        } else if (ln.find("univers") != std::string::npos || ln.find("универ") != std::string::npos) {
             art = AsciiArt::GetUniversity();
-        else if (ln.find("auditor") != std::string::npos || ln.find("аудитор") != std::string::npos || ln.find("class") != std::string::npos)
+        } else if (ln.find("auditor") != std::string::npos ||
+                   ln.find("аудитор") != std::string::npos ||
+                   ln.find("class") != std::string::npos) {
             art = AsciiArt::GetClassroom();
-        else if (ln.find("cant") != std::string::npos || ln.find("стол") != std::string::npos || ln.find("cafe") != std::string::npos)
+        } else if (ln.find("cant") != std::string::npos ||
+                   ln.find("стол") != std::string::npos ||
+                   ln.find("cafe") != std::string::npos) {
             art = AsciiArt::GetCafeteria();
-        else if (ln.find("street") != std::string::npos || ln.find("улиц") != std::string::npos)
+        } else if (ln.find("street") != std::string::npos || ln.find("улиц") != std::string::npos) {
             art = AsciiArt::GetStreet();
-        else
+        } else {
             art = AsciiArt::ForLocation(static_cast<int>(player.getLocation()));
+        }
     } else {
         art = AsciiArt::ForLocation(static_cast<int>(player.getLocation()));
     }
 
-    // Build panel
     std::string result;
     std::istringstream artStream(art);
     std::string aLine;
+
     while (std::getline(artStream, aLine)) {
         result += rpad(aLine, rpW) + "\n";
     }
 
-    // Separator line
     result += std::string(rpW, '-') + "\n";
 
-    // Stats
     const auto& stats = player.getStats();
-    result += " " + Lang::get("hud_en") + ":" + MakeBarString(stats.energy, GameConstants::MAX_STAT, 10) + "\n";
-    result += " " + Lang::get("hud_fat") + ":" + MakeBarString(100 - stats.fatigue, 100, 10) + "\n";
-    result += " " + Lang::get("hud_str") + ":" + MakeBarString(100 - stats.stress, 100, 10) + "\n";
-    result += " " + Lang::get("hud_hun") + ":" + MakeBarString(100 - stats.hunger, 100, 10) + "\n";
 
-    // Debuffs
+    result += " " + Lang::get("hud_en") + ":"
+        + MakeBarString(stats.energy, GameConstants::MAX_STAT, 10) + "\n";
+
+    result += " " + Lang::get("hud_fat") + ":"
+        + MakeBarString(100 - stats.fatigue, 100, 10) + "\n";
+
+    result += " " + Lang::get("hud_str") + ":"
+        + MakeBarString(100 - stats.stress, 100, 10) + "\n";
+
+    // hunger теперь сытость
+    result += " " + Lang::get("hud_hun") + ":"
+        + MakeBarString(stats.hunger, GameConstants::MAX_HUNGER, 10) + "\n";
+
     if (DebuffSystem::HasAnyDebuff(player)) {
         result += " " + DebuffSystem::GetBuffDescription(player) + "\n";
     }
