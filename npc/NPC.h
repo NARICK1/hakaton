@@ -15,7 +15,10 @@ protected:
     std::string description;
     std::map<std::string, NPCMemoryEntry> memory;
     std::vector<NPCAction> actionHistory;
-    int relationship = 50;
+
+    // Важно:
+    // игровые отношения больше хранятся только в Player::npcRelationships.
+    // NPC хранит только доверие и память, чтобы не было двух разных источников отношений.
     int trustLevel = 50;
 
 public:
@@ -25,11 +28,15 @@ public:
 
     const std::string& getName() const { return name; }
     const std::string& getDescription() const { return description; }
-    int getRelationship() const { return relationship; }
-    int getTrust() const { return trustLevel; }
-    void setRelationship(int val) { relationship = std::clamp(val, 0, 100); }
-    void setTrust(int val) { trustLevel = std::clamp(val, 0, 100); }
+
+    // Совместимость со старым кодом.
+    // Реальное отношение для геймплея нужно брать через Player::getRelation(npcName).
+    int getRelationship() const { return trustLevel; }
+    void setRelationship(int val) { trustLevel = std::clamp(val, 0, 100); }
     void modifyRelationship(int delta);
+
+    int getTrust() const { return trustLevel; }
+    void setTrust(int val) { trustLevel = std::clamp(val, 0, 100); }
     void modifyTrust(int delta);
 
     // Система памяти NPC — простые ключи
@@ -44,8 +51,8 @@ public:
     void recordAction(const NPCAction& action);
     const std::vector<NPCAction>& getActionHistory() const { return actionHistory; }
     int countActionsByCategory(const std::string& category) const;
-    bool hasPositiveHistory(int recentDays = 3) const;
-    bool hasNegativeHistory(int recentDays = 3) const;
+    bool hasPositiveHistory(int currentDay, int recentDays = 3) const;
+    bool hasNegativeHistory(int currentDay, int recentDays = 3) const;
     std::string getEmotionalState() const;
 
     // Диалоги
