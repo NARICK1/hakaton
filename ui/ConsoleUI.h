@@ -37,6 +37,11 @@ public:
     static void ClearScreen();
     static void WaitForEnter();
 
+    // Запоминает диапазон выбора для следующего ReadInt() без явных min/max.
+    // Нужно для кат-сцен и ручных диалогов, где варианты уже напечатаны на экране.
+    static void SetPendingChoiceRange(int minValue, int maxValue);
+    static void ClearPendingChoiceRange();
+
     // Безопасный ввод числа.
     // Не ломает cin, если игрок ввёл букву или мусор.
     static int ReadInt(
