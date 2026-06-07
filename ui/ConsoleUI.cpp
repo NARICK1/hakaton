@@ -41,12 +41,6 @@ std::string rpad(const std::string& s, int visWidth) {
     return s + std::string(visWidth - vlen, ' ');
 }
 
-static std::string lpad(const std::string& s, int visWidth) {
-    size_t vlen = visLen(s);
-    if (vlen >= static_cast<size_t>(visWidth))
-        return s.substr(0, static_cast<size_t>(visWidth));
-    return std::string(visWidth - vlen, ' ') + s;
-}
 
 std::vector<std::string> wordWrap(const std::string& text, int visWidth) {
     std::vector<std::string> lines;
@@ -237,7 +231,7 @@ std::string ConsoleUI::MakeTopBar(const Player& player) {
                        + std::to_string(player.getCurrentDay());
     std::string timeStr = player.getTimeString();
     std::string locStr = locationToString(player.getLocation());
-    return rpad(dayStr + " | " + timeStr + " | " + locStr, totalW);
+    return rpad(dayStr + " | " + timeStr + " | " + locStr + " | " + player.getDifficultyName(), totalW);
 }
 
 std::string ConsoleUI::MakeStatBar(const Player& player) {
@@ -547,6 +541,7 @@ void ConsoleUI::PrintPlayerStats(const Player& player) {
     std::cout << BOX_V " " << rpad(Lang::get("hud_money") + ": "
         + std::to_string(stats.money), totalW - 2) << " " BOX_V "\n";
 
+    std::cout << BOX_V " " << rpad("Сложность: " + player.getDifficultyName(), totalW - 2) << " " BOX_V "\n";
     std::cout << BOX_V " " << rpad("Долги: " + std::to_string(player.getDebts()), totalW - 2) << " " BOX_V "\n";
     std::cout << BOX_V " " << rpad("Репутация: " + ReputationSystem::GetReputationStatus(player), totalW - 2) << " " BOX_V "\n";
     std::cout << BOX_V " " << rpad("Усталость: " + FatigueSystem::GetFatigueStatus(player), totalW - 2) << " " BOX_V "\n";

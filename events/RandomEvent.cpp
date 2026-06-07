@@ -15,20 +15,22 @@ void RandomEventManager::initEvents() {
             "Находка",
             "Ты нашёл на улице 200 рублей!",
             [](Player& p) {
-                p.getStats().money += 200;
+                int gain = p.scaleMoneyGain(200);
+                p.getStats().money += gain;
                 p.getStats().clampAll();
-                std::cout << "+200 рублей!\n";
+                std::cout << "+" << gain << " рублей!\n";
             },
             15, 1, 8
         },
         {
             "Потеря",
-            "Ты потерял 150 рублей из кармана.",
+            "Ты потерял деньги из кармана.",
             [](Player& p) {
                 auto& s = p.getStats();
-                s.money = std::max(0, s.money - 150);
+                int loss = p.scaleCost(150);
+                s.money = std::max(0, s.money - loss);
                 s.clampAll();
-                std::cout << "-150 рублей...\n";
+                std::cout << "-" << loss << " рублей...\n";
             },
             10, 1, 8
         },
@@ -37,10 +39,12 @@ void RandomEventManager::initEvents() {
             "На улице ты встретил старого друга. Он подбодрил тебя.",
             [](Player& p) {
                 auto& s = p.getStats();
-                s.stress = std::max(0, s.stress - 10);
-                s.energy += 5;
+                int stressDown = p.scaleGain(10);
+                int energyGain = p.scaleGain(5);
+                s.stress = std::max(0, s.stress - stressDown);
+                s.energy += energyGain;
                 s.clampAll();
-                std::cout << "Стресс -10, энергия +5\n";
+                std::cout << "Стресс -" << stressDown << ", энергия +" << energyGain << "\n";
             },
             12, 1, 8
         },
@@ -50,12 +54,15 @@ void RandomEventManager::initEvents() {
             [](Player& p) {
                 auto& s = p.getStats();
 
+                int hungerGain = p.scaleGain(30);
+                int energyGain = p.scaleGain(10);
+
                 // hunger теперь сытость
-                s.hunger = std::min(GameConstants::MAX_HUNGER, s.hunger + 30);
-                s.energy += 10;
+                s.hunger = std::min(GameConstants::MAX_HUNGER, s.hunger + hungerGain);
+                s.energy += energyGain;
 
                 s.clampAll();
-                std::cout << "Сытость +30, энергия +10\n";
+                std::cout << "Сытость +" << hungerGain << ", энергия +" << energyGain << "\n";
             },
             8, 1, 8
         },
@@ -65,13 +72,19 @@ void RandomEventManager::initEvents() {
             [](Player& p) {
                 auto& s = p.getStats();
 
+                int hungerLoss = p.scalePenalty(10);
+                int energyLoss = p.scalePenalty(10);
+                int healthLoss = p.scalePenalty(5);
+
                 // Плохая еда снижает сытость и здоровье
-                s.hunger = std::max(0, s.hunger - 10);
-                s.energy -= 10;
-                s.health -= 5;
+                s.hunger = std::max(0, s.hunger - hungerLoss);
+                s.energy -= energyLoss;
+                s.health -= healthLoss;
 
                 s.clampAll();
-                std::cout << "Сытость -10, энергия -10, здоровье -5\n";
+                std::cout << "Сытость -" << hungerLoss
+                          << ", энергия -" << energyLoss
+                          << ", здоровье -" << healthLoss << "\n";
             },
             8, 1, 8
         },
@@ -80,10 +93,11 @@ void RandomEventManager::initEvents() {
             "Преподаватель заметил твои старания и предложил дополнительное занятие.",
             [](Player& p) {
                 auto& s = p.getStats();
-                s.intellect += 5;
+                int intellectGain = p.scaleGain(5);
+                s.intellect += intellectGain;
                 p.modifyRelation("Преподаватели", 5);
                 s.clampAll();
-                std::cout << "Интеллект +5, отношения с преподавателями +5\n";
+                std::cout << "Интеллект +" << intellectGain << ", отношения с преподавателями улучшились\n";
             },
             10, 1, 8
         },
@@ -92,10 +106,11 @@ void RandomEventManager::initEvents() {
             "Ты рассказал анекдот, и преподаватель посмеялся. Настроение улучшилось!",
             [](Player& p) {
                 auto& s = p.getStats();
-                s.stress = std::max(0, s.stress - 15);
+                int stressDown = p.scaleGain(15);
+                s.stress = std::max(0, s.stress - stressDown);
                 p.modifyRelation("Преподаватели", 3);
                 s.clampAll();
-                std::cout << "Стресс -15, отношения с преподавателями +3\n";
+                std::cout << "Стресс -" << stressDown << ", отношения с преподавателями улучшились\n";
             },
             7, 1, 8
         },
@@ -104,11 +119,16 @@ void RandomEventManager::initEvents() {
             "Сосед всю ночь играл на гитаре. Ты не выспался.",
             [](Player& p) {
                 auto& s = p.getStats();
-                s.energy -= 15;
-                s.fatigue += 15;
-                s.stress += 5;
+                int energyLoss = p.scalePenalty(15);
+                int fatigueGain = p.scalePenalty(15);
+                int stressGain = p.scalePenalty(5);
+                s.energy -= energyLoss;
+                s.fatigue += fatigueGain;
+                s.stress += stressGain;
                 s.clampAll();
-                std::cout << "Энергия -15, усталость +15, стресс +5\n";
+                std::cout << "Энергия -" << energyLoss
+                          << ", усталость +" << fatigueGain
+                          << ", стресс +" << stressGain << "\n";
             },
             10, 1, 8
         },
@@ -116,9 +136,10 @@ void RandomEventManager::initEvents() {
             "Удачная покупка",
             "Ты купил товары со скидкой и сэкономил 200 рублей!",
             [](Player& p) {
-                p.getStats().money += 200;
+                int gain = p.scaleMoneyGain(200);
+                p.getStats().money += gain;
                 p.getStats().clampAll();
-                std::cout << "+200 рублей!\n";
+                std::cout << "+" << gain << " рублей!\n";
             },
             8, 1, 8
         },
@@ -127,10 +148,12 @@ void RandomEventManager::initEvents() {
             "Родители позвонили и подбодрили тебя. Ты чувствуешь прилив сил.",
             [](Player& p) {
                 auto& s = p.getStats();
-                s.energy += 10;
-                s.stress = std::max(0, s.stress - 10);
+                int energyGain = p.scaleGain(10);
+                int stressDown = p.scaleGain(10);
+                s.energy += energyGain;
+                s.stress = std::max(0, s.stress - stressDown);
                 s.clampAll();
-                std::cout << "Энергия +10, стресс -10\n";
+                std::cout << "Энергия +" << energyGain << ", стресс -" << stressDown << "\n";
             },
             12, 1, 8
         }

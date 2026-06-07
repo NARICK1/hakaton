@@ -11,6 +11,10 @@ Player::Player(const std::string& playerName)
     npcRelationships["Преподаватели"] = GameConstants::START_RELATIONSHIP;
 }
 
+void Player::setDifficulty(DifficultyLevel value) {
+    difficulty = value;
+}
+
 int Player::getGrade(int examId) const {
     auto it = grades.find(examId);
     return it != grades.end() ? it->second : 0;
@@ -34,14 +38,14 @@ void Player::nextDay() {
     currentMinute = 0;
     currentLocation = LocationID::Home;
 
-    stats.money += GameConstants::MONEY_PER_DAY_SCHOLARSHIP;
+    stats.money += scaleMoneyGain(GameConstants::MONEY_PER_DAY_SCHOLARSHIP);
 
     // Каждый новый день немного тратит сытость
-    stats.hunger -= GameConstants::DAY_HUNGER_LOSS;
+    stats.hunger -= scalePenalty(GameConstants::DAY_HUNGER_LOSS);
 
     // За день копится усталость и стресс
-    stats.fatigue += 5;
-    stats.stress += 3;
+    stats.fatigue += scalePenalty(5);
+    stats.stress += scalePenalty(3);
 
     stats.clampAll();
 }
@@ -60,10 +64,10 @@ void Player::advanceTime(int minutes) {
     }
 
     // За каждые 30 минут сытость падает
-    stats.hunger -= (minutes / 30) * GameConstants::TIME_HUNGER_LOSS_PER_30_MIN;
+    stats.hunger -= scalePenalty((minutes / 30) * GameConstants::TIME_HUNGER_LOSS_PER_30_MIN);
 
     // За каждый полный час растёт усталость
-    stats.fatigue += minutes / 60;
+    stats.fatigue += scalePenalty(minutes / 60);
 
     stats.clampAll();
 }
@@ -100,8 +104,16 @@ void Player::modifyRelation(const std::string& npcName, int delta) {
     auto it = npcRelationships.find(npcName);
 
     if (it != npcRelationships.end()) {
+        int scaledDelta = delta;
+
+        if (delta > 0) {
+            scaledDelta = scaleGain(delta);
+        } else if (delta < 0) {
+            scaledDelta = -scalePenalty(-delta);
+        }
+
         it->second = std::clamp(
-            it->second + delta,
+            it->second + scaledDelta,
             GameConstants::MIN_STAT,
             GameConstants::MAX_STAT
         );
@@ -215,6 +227,8 @@ std::string Player::serialize() const {
         oss << static_cast<int>(b) << "\n";
     }
 
+    oss << static_cast<int>(difficulty) << "\n";
+
     return oss.str();
 }
 
@@ -322,6 +336,20 @@ bool Player::deserialize(const std::string& data) {
         }
 
         activeBuffs.push_back(static_cast<BuffType>(b));
+    }
+
+    int difficultyInt = static_cast<int>(DifficultyLevel::Normal);
+    if (iss >> difficultyInt) {
+        if (difficultyInt == static_cast<int>(DifficultyLevel::Easy)) {
+            difficulty = DifficultyLevel::Easy;
+        } else if (difficultyInt == static_cast<int>(DifficultyLevel::Hard)) {
+            difficulty = DifficultyLevel::Hard;
+        } else {
+            difficulty = DifficultyLevel::Normal;
+        }
+    } else {
+        // Старые сохранения не содержали сложность. Для них оставляем нормальный режим.
+        difficulty = DifficultyLevel::Normal;
     }
 
     stats.clampAll();
