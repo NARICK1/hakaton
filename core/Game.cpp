@@ -1,6 +1,7 @@
 #include "Game.h"
 #include "../ui/ConsoleUI.h"
 #include "../ui/Menu.h"
+#include "../ui/DevMode.h"
 #include "../systems/EndingSystem.h"
 #include "../systems/RelationshipSystem.h"
 #include "../systems/FatigueSystem.h"
@@ -58,6 +59,9 @@ void Game::run() {
                 break;
             case 4:
                 Menu::ShowSettings();
+                break;
+            case 5:
+                DevMode::ShowDevMenu();
                 break;
             case 0:
                 running = false;

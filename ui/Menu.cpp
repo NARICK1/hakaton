@@ -77,10 +77,11 @@ void Menu::ShowMainMenu() {
         Lang::get("menu_load_game"),
         Lang::get("menu_controls"),
         Lang::get("menu_settings"),
+        "Режим разработчика",
         Lang::get("menu_exit")
     };
-    int nums[] = {1, 2, 3, 4, 0};
-    for (int i = 0; i < 5; i++) {
+    int nums[] = {1, 2, 3, 4, 5, 0};
+    for (int i = 0; i < 6; i++) {
         std::string line = "    [" + std::to_string(nums[i]) + "] " + items[i];
         std::cout << BOX_V " " << rpad(line, w - 2) << " " BOX_V "\n";
         sleepMs(50);
