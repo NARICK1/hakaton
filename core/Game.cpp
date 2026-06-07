@@ -12,6 +12,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include "../data/Constants.h"
 
 Game::Game() {
     ConsoleUI::SetConsoleUTF8();
@@ -884,14 +885,25 @@ void Game::runDay4() {
     DiscreteExam discreteExam;
     int score = discreteExam.runExam(state.getPlayer());
 
-    if (state.getPlayer().hasFlag("took_cheat_sheet") && score < 50) {
-        ConsoleUI::RenderScreen("ШПАРГАЛКА",
-            "Шпаргалка помогла! Ты подсмотрел пару формул.\n+10 баллов к результату.",
-            {}, state.getPlayer());
-        score = std::min(100, score + 10);
-        state.getPlayer().setGrade(3, score);
-        ConsoleUI::WaitForEnter();
+    if (state.getPlayer().hasFlag("took_cheat_sheet") && score < GameConstants::EXAM_PASS_THRESHOLD) {
+    int oldScore = score;
+
+    ConsoleUI::RenderScreen("ШПАРГАЛКА",
+        "Шпаргалка помогла! Ты подсмотрел пару формул.\n+10 баллов к результату.",
+        {}, state.getPlayer());
+
+    score = std::min(100, score + 10);
+    state.getPlayer().setGrade(3, score);
+
+    // Если до шпаргалки экзамен был провален, а после шпаргалки стал сдан,
+    // убираем долг, который runExam() уже успел добавить.
+    if (oldScore < GameConstants::EXAM_PASS_THRESHOLD &&
+        score >= GameConstants::EXAM_PASS_THRESHOLD) {
+        state.getPlayer().removeDebt();
     }
+
+    ConsoleUI::WaitForEnter();
+}
 
     ConsoleUI::WaitForEnter();
 
@@ -992,12 +1004,25 @@ void Game::runDay5() {
     CalculusExam calculusExam;
     int score = calculusExam.runExam(state.getPlayer());
 
-    if (state.getPlayer().hasFlag("bought_answers") && score < 50) {
-        ConsoleUI::RenderScreen("ОТВЕТЫ", "Купленные ответы помогли! +15 баллов.", {}, state.getPlayer());
-        score = std::min(100, score + 15);
-        state.getPlayer().setGrade(4, score);
-        ConsoleUI::WaitForEnter();
+    if (state.getPlayer().hasFlag("bought_answers") && score < GameConstants::EXAM_PASS_THRESHOLD) {
+    int oldScore = score;
+
+    ConsoleUI::RenderScreen("ОТВЕТЫ",
+        "Купленные ответы помогли! +15 баллов.",
+        {}, state.getPlayer());
+
+    score = std::min(100, score + 15);
+    state.getPlayer().setGrade(4, score);
+
+    // Если до купленных ответов экзамен был провален, а после них стал сдан,
+    // убираем долг, который runExam() уже успел добавить.
+    if (oldScore < GameConstants::EXAM_PASS_THRESHOLD &&
+        score >= GameConstants::EXAM_PASS_THRESHOLD) {
+        state.getPlayer().removeDebt();
     }
+
+    ConsoleUI::WaitForEnter();
+}
 
     ConsoleUI::WaitForEnter();
 
@@ -1941,6 +1966,7 @@ void Game::handleShopLocation() {
 void Game::handleFlowerShopLocation() {
     ConsoleUI::PrintHeader("ЦВЕТОЧНЫЙ МАГАЗИН");
     ConsoleUI::ShowLocationArt(LocationID::FlowerShop);
+
 
     if (state.getPlayer().getStats().money >= GameConstants::FLOWER_COST) {
         ConsoleUI::RenderScreen("ЦВЕТЫ",
