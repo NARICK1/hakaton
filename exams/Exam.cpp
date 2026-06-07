@@ -24,6 +24,10 @@ int Exam::askQuestionsConsole(Player& player) const {
     int correctCount = 0;
     int totalQuestions = static_cast<int>(questions.size());
 
+    if (totalQuestions <= 0) {
+        return 0;
+    }
+
     for (int i = 0; i < totalQuestions; i++) {
         const auto& q = questions[i];
         ConsoleUI::PrintSeparator();
@@ -75,10 +79,56 @@ int Exam::askQuestionsConsole(Player& player) const {
     }
 
     ConsoleUI::PrintSeparator();
-    std::cout << "Результат: " << correctCount << " из " << totalQuestions << " правильных.\n";
 
-    int bonus = player.getStats().intellect / 10;
-    return std::min(100, (correctCount * 100 / totalQuestions) + bonus);
+    int baseScore = (correctCount * 100) / totalQuestions;
+
+    int effectiveIntellect = player.getStats().intellect;
+    if (player.hasBuff(BuffType::ImposterSyndrome)) {
+        effectiveIntellect = effectiveIntellect * 80 / 100;
+    }
+
+    int intellectBonus = 0;
+    if (effectiveIntellect >= 90) {
+        intellectBonus = 25;
+    } else if (effectiveIntellect >= 75) {
+        intellectBonus = 20;
+    } else if (effectiveIntellect >= 60) {
+        intellectBonus = 12;
+    } else if (effectiveIntellect >= 45) {
+        intellectBonus = 5;
+    } else if (effectiveIntellect >= 30) {
+        intellectBonus = 0;
+    } else {
+        intellectBonus = -10;
+    }
+
+    // difficulty хранится у каждого экзамена:
+    // 40 = лёгкий, 50 = обычный, 70 = тяжёлый.
+    // Чем выше сложность, тем сильнее штраф.
+    int difficultyModifier = (50 - difficulty) / 2;
+
+    int score = std::clamp(
+        baseScore + intellectBonus + difficultyModifier,
+        0,
+        100
+    );
+
+    std::cout << "Результат: " << correctCount << " из " << totalQuestions << " правильных.\n";
+    std::cout << "Базовый балл за ответы: " << baseScore << "\n";
+
+    if (player.hasBuff(BuffType::ImposterSyndrome)) {
+        std::cout << "Синдром самозванца мешает сосредоточиться: эффективный интеллект снижен.\n";
+    }
+
+    std::cout << "Бонус интеллекта: "
+              << (intellectBonus >= 0 ? "+" : "") << intellectBonus << "\n";
+
+    std::cout << "Модификатор сложности экзамена: "
+              << (difficultyModifier >= 0 ? "+" : "") << difficultyModifier << "\n";
+
+    std::cout << "Итог до реакции преподавателя: " << score << "\n";
+
+    return score;
 }
 
 std::string Exam::getTeacherReaction(int score) const {
