@@ -37,7 +37,7 @@ namespace {
             return false;
         }
 
-        // Можно задавать несколько правильных вариантов через символ |
+        // Несколько правильных вариантов можно писать через |
         // Например: "vector|std::vector|вектор"
         std::stringstream ss(correctAnswer);
         std::string variant;
@@ -55,12 +55,16 @@ namespace {
 }
 
 int Exam::evaluateAnswers(const std::vector<int>& answers) const {
-    if (answers.empty() || questions.empty()) return 0;
+    if (answers.empty() || questions.empty()) {
+        return 0;
+    }
 
     int correct = 0;
 
     for (size_t i = 0; i < std::min(answers.size(), questions.size()); i++) {
-        if (answers[i] == 1) correct++;
+        if (answers[i] == 1) {
+            correct++;
+        }
     }
 
     return (correct * 100) / static_cast<int>(questions.size());
@@ -95,19 +99,13 @@ int Exam::askQuestionsConsole(Player& player) const {
 
             std::cout << "\nВведите номер ответа: ";
 
-            int choice;
-            std::cin >> choice;
-            std::cin.ignore(10000, '\n');
+            int choice = ConsoleUI::ReadInt("", 1, static_cast<int>(q.options.size()));
 
-            if (choice >= 1 && choice <= static_cast<int>(q.options.size())) {
-                if (q.options[choice - 1] == q.correctAnswer) {
-                    std::cout << "✓ Правильно!\n";
-                    correctCount++;
-                } else {
-                    std::cout << "✗ Неправильно. Правильный ответ: " << q.correctAnswer << "\n";
-                }
+            if (q.options[choice - 1] == q.correctAnswer) {
+                std::cout << "✓ Правильно!\n";
+                correctCount++;
             } else {
-                std::cout << "✗ Такого варианта нет.\n";
+                std::cout << "✗ Неправильно. Правильный ответ: " << q.correctAnswer << "\n";
             }
         } else {
             std::cout << "Введите ваш ответ: ";
@@ -150,6 +148,10 @@ int Exam::askQuestionsConsole(Player& player) const {
         intellectBonus = -10;
     }
 
+    // difficulty:
+    // 40 = лёгкий экзамен
+    // 50 = обычный экзамен
+    // 70 = тяжёлый экзамен
     int difficultyModifier = (50 - difficulty) / 2;
 
     int score = std::clamp(
@@ -187,6 +189,7 @@ std::string Exam::getTeacherReaction(int score) const {
 }
 
 // ---- HistoryExam ----
+
 HistoryExam::HistoryExam() {
     name = "История";
     teacherName = "Елена Викторовна";
@@ -242,9 +245,7 @@ int HistoryExam::runExam(Player& player) {
     std::cout << "3. Правый билет\n";
     std::cout << "Ваш выбор: ";
 
-    int ticketChoice;
-    std::cin >> ticketChoice;
-    std::cin.ignore(10000, '\n');
+    int ticketChoice = ConsoleUI::ReadInt("", 1, 3);
 
     int luckBonus = 0;
 
@@ -257,7 +258,12 @@ int HistoryExam::runExam(Player& player) {
     }
 
     int score = askQuestionsConsole(player);
-    score = std::clamp(score + luckBonus + (player.getRelation("Преподаватели") / 10), 0, 100);
+
+    score = std::clamp(
+        score + luckBonus + (player.getRelation("Преподаватели") / 10),
+        0,
+        100
+    );
 
     std::cout << "\n" << getTeacherReaction(score) << "\n";
 
@@ -274,6 +280,7 @@ int HistoryExam::runExam(Player& player) {
 }
 
 // ---- YAMPExam ----
+
 YAMPExam::YAMPExam() {
     name = "Язык и мат. программирования";
     teacherName = "Михаил Олегович";
@@ -300,8 +307,12 @@ void YAMPExam::generateQuestions() {
     questions.push_back({
         "Что такое виртуальная функция?",
         "Функция, которая может быть переопределена в наследнике",
-        {"Статическая функция", "Функция, которая может быть переопределена в наследнике",
-         "Дружественная функция", "Встроенная функция"},
+        {
+            "Статическая функция",
+            "Функция, которая может быть переопределена в наследнике",
+            "Дружественная функция",
+            "Встроенная функция"
+        },
         true
     });
 
@@ -315,8 +326,12 @@ void YAMPExam::generateQuestions() {
     questions.push_back({
         "Что делает delete[]?",
         "Освобождает массив в памяти",
-        {"Освобождает одну переменную", "Освобождает массив в памяти",
-         "Удаляет файл", "Вызывает деструктор"},
+        {
+            "Освобождает одну переменную",
+            "Освобождает массив в памяти",
+            "Удаляет файл",
+            "Вызывает деструктор"
+        },
         true
     });
 }
@@ -326,7 +341,12 @@ int YAMPExam::runExam(Player& player) {
     displayQuestions();
 
     int score = askQuestionsConsole(player);
-    score = std::clamp(score + (player.getRelation("Преподаватели") / 10), 0, 100);
+
+    score = std::clamp(
+        score + (player.getRelation("Преподаватели") / 10),
+        0,
+        100
+    );
 
     std::cout << "\n" << getTeacherReaction(score) << "\n";
 
@@ -343,6 +363,7 @@ int YAMPExam::runExam(Player& player) {
 }
 
 // ---- DiscreteExam ----
+
 DiscreteExam::DiscreteExam() {
     name = "Дискретная математика";
     teacherName = "Наталья Петровна";
@@ -369,8 +390,12 @@ void DiscreteExam::generateQuestions() {
     questions.push_back({
         "Что такое отношение эквивалентности?",
         "Рефлексивное, симметричное, транзитивное отношение",
-        {"Симметричное отношение", "Рефлексивное, симметричное, транзитивное отношение",
-         "Транзитивное отношение", "Рефлексивное отношение"},
+        {
+            "Симметричное отношение",
+            "Рефлексивное, симметричное, транзитивное отношение",
+            "Транзитивное отношение",
+            "Рефлексивное отношение"
+        },
         true
     });
 
@@ -394,7 +419,12 @@ int DiscreteExam::runExam(Player& player) {
     displayQuestions();
 
     int score = askQuestionsConsole(player);
-    score = std::clamp(score + (player.getRelation("Преподаватели") / 10), 0, 100);
+
+    score = std::clamp(
+        score + (player.getRelation("Преподаватели") / 10),
+        0,
+        100
+    );
 
     std::cout << "\n" << getTeacherReaction(score) << "\n";
 
@@ -411,6 +441,7 @@ int DiscreteExam::runExam(Player& player) {
 }
 
 // ---- CalculusExam ----
+
 CalculusExam::CalculusExam() {
     name = "Математический анализ";
     teacherName = "Александр Сергеевич";
@@ -461,7 +492,12 @@ int CalculusExam::runExam(Player& player) {
     displayQuestions();
 
     int score = askQuestionsConsole(player);
-    score = std::clamp(score + (player.getRelation("Преподаватели") / 10), 0, 100);
+
+    score = std::clamp(
+        score + (player.getRelation("Преподаватели") / 10),
+        0,
+        100
+    );
 
     std::cout << "\n" << getTeacherReaction(score) << "\n";
 
@@ -478,6 +514,7 @@ int CalculusExam::runExam(Player& player) {
 }
 
 // ---- NetworksExam ----
+
 NetworksExam::NetworksExam() {
     name = "Компьютерные сети";
     teacherName = "Денис Игоревич";
@@ -528,7 +565,12 @@ int NetworksExam::runExam(Player& player) {
     displayQuestions();
 
     int score = askQuestionsConsole(player);
-    score = std::clamp(score + (player.getRelation("Преподаватели") / 10), 0, 100);
+
+    score = std::clamp(
+        score + (player.getRelation("Преподаватели") / 10),
+        0,
+        100
+    );
 
     std::cout << "\n" << getTeacherReaction(score) << "\n";
 
