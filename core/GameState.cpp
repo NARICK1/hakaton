@@ -9,17 +9,21 @@ std::string GameState::serialize() const {
     oss << (gameStarted ? "1" : "0") << "\n";
     oss << "---PLAYER---\n";
     oss << player.serialize();
+    oss << "---NPC_MEMORY---\n";
+    oss << npcMemoryData.size() << "\n";
+    oss << npcMemoryData;
+    oss << "\n---END---\n";
     return oss.str();
 }
 
 bool GameState::deserialize(const std::string& data) {
     std::istringstream iss(data);
     int phaseInt, reasonInt;
-    std::string startedStr, playerSection, playerData;
+    std::string startedStr;
 
     if (!(iss >> phaseInt >> reasonInt >> currentDay >> startedStr)) return false;
 
-    // Пропускаем разделитель и читаем данные игрока
+    // Skip to PLAYER section
     std::string line;
     bool playerSectionFound = false;
     while (std::getline(iss, line)) {
@@ -28,20 +32,39 @@ bool GameState::deserialize(const std::string& data) {
             break;
         }
     }
-
     if (!playerSectionFound) return false;
 
-    // Читаем все оставшиеся строки как данные игрока
-    std::string remaining;
-    std::getline(iss, remaining, '\0');
-    if (!remaining.empty() && remaining.back() == '\0') {
-        remaining.pop_back();
+    // Read all lines until ---NPC_MEMORY--- as player data
+    std::string playerData;
+    bool npcSectionFound = false;
+    while (std::getline(iss, line)) {
+        if (line == "---NPC_MEMORY---") {
+            npcSectionFound = true;
+            break;
+        }
+        if (!playerData.empty()) playerData += "\n";
+        playerData += line;
     }
 
     currentPhase = static_cast<GamePhase>(phaseInt);
     gameOverReason = static_cast<GameOverCondition>(reasonInt);
     gameStarted = (startedStr == "1");
 
-    if (remaining.empty()) return false;
-    return player.deserialize(remaining);
+    if (playerData.empty()) return false;
+    if (!player.deserialize(playerData)) return false;
+
+    // Read NPC memory size and data
+    npcMemoryData.clear();
+    if (npcSectionFound) {
+        size_t memSize;
+        if (iss >> memSize) {
+            iss.ignore(); // skip newline
+            if (memSize > 0) {
+                npcMemoryData.resize(memSize);
+                iss.read(&npcMemoryData[0], memSize);
+            }
+        }
+    }
+
+    return true;
 }

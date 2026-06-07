@@ -20,7 +20,8 @@ private:
     void initGame();
     void initNPCs();
 
-    // Сцены по дням
+    // Пролог и сцены по дням
+    void runPrologue();
     void runDay1();
     void runDay2();
     void runDay3();
@@ -44,9 +45,10 @@ private:
     void interactWithBulat();
     void interactWithSemen();
     void interactWithArtem();
+    void recordNPCChoice(const std::string& npcName, const std::string& choiceKey, int value = 1);
 
     // Экзамены
-    void takeExam(Exam& exam, int examId);
+    int takeExam(Exam& exam, int examId);
 
     // Сохранение/загрузка
     void saveGame();

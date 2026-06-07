@@ -3,6 +3,7 @@
 #include "../data/Enums.h"
 #include <string>
 #include <map>
+#include <vector>
 #include <memory>
 #include <algorithm>
 
@@ -13,7 +14,9 @@ protected:
     std::string name;
     std::string description;
     std::map<std::string, NPCMemoryEntry> memory;
+    std::vector<NPCAction> actionHistory;
     int relationship = 50;
+    int trustLevel = 50;
 
 public:
     NPC() = default;
@@ -23,16 +26,27 @@ public:
     const std::string& getName() const { return name; }
     const std::string& getDescription() const { return description; }
     int getRelationship() const { return relationship; }
+    int getTrust() const { return trustLevel; }
     void setRelationship(int val) { relationship = std::clamp(val, 0, 100); }
+    void setTrust(int val) { trustLevel = std::clamp(val, 0, 100); }
     void modifyRelationship(int delta);
+    void modifyTrust(int delta);
 
-    // Система памяти NPC
+    // Система памяти NPC — простые ключи
     void rememberEvent(const std::string& eventKey, int value = 1);
     bool hasMemory(const std::string& eventKey) const;
     int getMemoryValue(const std::string& eventKey) const;
     bool wasHelped() const;
     bool wasRude() const;
     int getHelpCount() const;
+
+    // Расширенная память — история действий
+    void recordAction(const NPCAction& action);
+    const std::vector<NPCAction>& getActionHistory() const { return actionHistory; }
+    int countActionsByCategory(const std::string& category) const;
+    bool hasPositiveHistory(int recentDays = 3) const;
+    bool hasNegativeHistory(int recentDays = 3) const;
+    std::string getEmotionalState() const;
 
     // Диалоги
     virtual std::string getDialog(const Player& player) const;

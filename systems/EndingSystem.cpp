@@ -1,24 +1,45 @@
 #include "EndingSystem.h"
+#include "../data/Lang.h"
 #include <iostream>
+#include <sstream>
+
+static std::string makeEndingFrame(const std::string& title, const std::string& body) {
+    std::string result;
+    int W = 72;
+    std::string top = "+" + std::string(W, '=') + "+";
+    std::string side = "|";
+    result += top + "\n";
+
+    // Title centered
+    int lPad = (W - static_cast<int>(title.size())) / 2;
+    int rPad = W - lPad - static_cast<int>(title.size());
+    result += side + std::string(lPad, ' ') + title + std::string(rPad, ' ') + side + "\n";
+    result += side + std::string(W, ' ') + side + "\n";
+
+    // Body lines
+    std::istringstream iss(body);
+    std::string line;
+    while (std::getline(iss, line)) {
+        if (static_cast<int>(line.size()) > W) line = line.substr(0, W);
+        result += side + " " + line + std::string(W - 1 - static_cast<int>(line.size()), ' ') + side + "\n";
+    }
+
+    result += side + std::string(W, ' ') + side + "\n";
+    result += "+" + std::string(W, '=') + "+";
+    return result;
+}
 
 GameOverCondition EndingSystem::CheckEnding(const Player& player) {
-    // Проверяем смертельные условия
     if (player.getStats().health <= 0) {
         return GameOverCondition::StarvedToDeath;
     }
-
     const auto& stats = player.getStats();
-
-    // Смерть от голода
     if (stats.hunger >= 100) {
         return GameOverCondition::StarvedToDeath;
     }
-
-    // Психбольница
     if (stats.stress >= 100) {
         return GameOverCondition::MentalHospital;
     }
-
     return GameOverCondition::None;
 }
 
@@ -34,198 +55,81 @@ GameOverCondition EndingSystem::EvaluateEnding(const Player& player) {
     }
     if (gradeCount > 0) avgGrade /= gradeCount;
 
-    // Проверка особых концовок
-
-    // Секретная романтическая
+    // Secret romantic ending
     if (player.hasFlag("romantic_ending") &&
         stats.romance >= 70 &&
-        player.getRelation("Алла") >= 80 &&
+        player.getRelation("Alla") >= 80 &&
         avgGrade >= 60) {
         return GameOverCondition::SecretRomantic;
     }
 
-    // Секретная армейская
+    // Secret army ending
     if (player.hasFlag("army_path")) {
         return GameOverCondition::SecretArmy;
     }
 
-    // Вечный должник
+    // Eternal debtor
     if (player.getDebts() >= 4) {
         return GameOverCondition::EternalDebtor;
     }
 
-    // Отчисление
+    // Expelled
     if (player.getDebts() >= 2 && avgGrade < 50) {
         return GameOverCondition::Expelled;
     }
 
-    // Академ
+    // Academic leave
     if (stats.stress >= 80 && stats.fatigue >= 80) {
         return GameOverCondition::AcademicLeave;
     }
 
-    // Оценка итогов
+    // Score evaluation
     int totalScore = 0;
-
     totalScore += stats.intellect / 2;
     totalScore += stats.humanity;
     totalScore += stats.romance > 50 ? 20 : 0;
     totalScore += avgGrade;
     totalScore -= stats.stress;
     totalScore -= stats.fatigue / 2;
-    totalScore += player.getRelation("Преподаватели");
+    totalScore += player.getRelation("Teachers");
 
     if (totalScore >= 300) return GameOverCondition::SuperEnding;
     if (totalScore >= 200) return GameOverCondition::GoodEnding;
     return GameOverCondition::NormalEnding;
 }
 
-std::string EndingSystem::GetEndingText(GameOverCondition ending) {
+static std::string endingTitle(GameOverCondition ending) {
     switch (ending) {
-    case GameOverCondition::SuperEnding:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                     СУПЕР-КОНЦОВКА                          ║
-║                                                            ║
-║ Тимур сдал все экзамены на отлично!                         ║
-║ Преподаватели восхищены его знаниями.                        ║
-║ Друзья гордятся им.                                         ║
-║ А Алла... У них с Тимуром настоящая любовь.                 ║
-║                                                            ║
-║ Тимур получил красный диплом и предложение                  ║
-║ о работе в лучшей IT-компании страны.                       ║
-║                                                            ║
-║ БУДНИ СТУДЕНТА ЗАКОНЧИЛИСЬ. НАЧИНАЕТСЯ ЖИЗНЬ!              ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::GoodEnding:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                     ХОРОШАЯ КОНЦОВКА                        ║
-║                                                            ║
-║ Тимур успешно сдал сессию.                                  ║
-║ Не всё было гладко, но он справился.                        ║
-║ Впереди лето, каникулы и новые планы.                       ║
-║                                                            ║
-║ Жизнь продолжается!                                        ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::NormalEnding:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                    НОРМАЛЬНАЯ КОНЦОВКА                      ║
-║                                                            ║
-║ Сессия позади. Было всякое.                                 ║
-║ Тимур выжил и это главное.                                  ║
-║ Впереди ещё много семестров...                              ║
-║                                                            ║
-║ В целом, всё нормально.                                    ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::Expelled:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                      ОТЧИСЛЕНИЕ                             ║
-║                                                            ║
-║ Тимура отчислили за неуспеваемость.                         ║
-║ Слишком много долгов, слишком мало знаний.                  ║
-║                                                            ║
-║ Родители расстроены. Будущее туманно.                       ║
-║ Но это не конец света...                                    ║
-║ Хотя сейчас кажется, что да.                                ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::AcademicLeave:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                       АКАДЕМ                                ║
-║                                                            ║
-║ Тимур ушёл в академический отпуск.                          ║
-║ Нервы сдали, сил больше нет.                                ║
-║                                                            ║
-║ Возможно, через год он вернётся.                            ║
-║ А может быть, найдёт другой путь.                           ║
-║                                                            ║
-║ Главное — отдохнуть и прийти в себя.                       ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::MentalHospital:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                     ПСИХБОЛЬНИЦА                            ║
-║                                                            ║
-║ Стресс сломал Тимура.                                       ║
-║ Бессонные ночи, постоянное напряжение...                     ║
-║                                                            ║
-║ Теперь ему нужна помощь специалистов.                       ║
-║ Хорошая новость: здесь не надо сдавать экзамены.            ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::StarvedToDeath:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                   СМЕРТЬ ОТ ГОЛОДА                          ║
-║                                                            ║
-║ Тимур забывал есть так часто, что организм не выдержал.     ║
-║                                                            ║
-║ Экзамены уже не важны.                                      ║
-║ Важно было вовремя пообедать...                             ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::EternalDebtor:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                    ВЕЧНЫЙ ДОЛЖНИК                           ║
-║                                                            ║
-║ Тимур накопил столько долгов, что их не покрыть.            ║
-║ Сессия не сдана, хвосты растут.                             ║
-║                                                            ║
-║ Придётся брать ещё один семестр...                          ║
-║ И ещё один...                                               ║
-║ И ещё...                                                    ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::SecretRomantic:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║              СЕКРЕТНАЯ РОМАНТИЧЕСКАЯ КОНЦОВКА              ║
-║                                                            ║
-║ Тимур и Алла — идеальная пара.                              ║
-║                                                            ║
-║ Вместе они сдали все экзамены.                              ║
-║ Вместе строят планы на будущее.                             ║
-║                                                            ║
-║ «И жили они долго и счастливо...»                           ║
-║                                                            ║
-║ Ну, по крайней мере, до следующей сессии.                  ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    case GameOverCondition::SecretArmy:
-        return R"(
-╔══════════════════════════════════════════════════════════════╗
-║                СЕКРЕТНАЯ АРМЕЙСКАЯ КОНЦОВКА                 ║
-║                                                            ║
-║ Тимур решил, что учёба — не его путь.                       ║
-║ Армия ждёт!                                                 ║
-║                                                            ║
-║ Два года срочной службы.                                    ║
-║ Новые друзья, новые испытания.                              ║
-║                                                            ║
-║ Может быть, вернётся доучиваться.                           ║
-║ А может быть, выберет другую дорогу.                        ║
-╚══════════════════════════════════════════════════════════════╝
-)";
-
-    default:
-        return "Неизвестная концовка.";
+    case GameOverCondition::SuperEnding: return Lang::get("end_super");
+    case GameOverCondition::GoodEnding: return Lang::get("end_good");
+    case GameOverCondition::NormalEnding: return Lang::get("end_normal");
+    case GameOverCondition::Expelled: return Lang::get("end_expelled");
+    case GameOverCondition::AcademicLeave: return Lang::get("end_academic");
+    case GameOverCondition::MentalHospital: return Lang::get("end_mental");
+    case GameOverCondition::StarvedToDeath: return Lang::get("end_starved");
+    case GameOverCondition::EternalDebtor: return Lang::get("end_debtor");
+    case GameOverCondition::SecretRomantic: return Lang::get("end_romantic");
+    case GameOverCondition::SecretArmy: return Lang::get("end_army");
+    default: return Lang::get("end_unknown");
     }
+}
+
+static std::string endingBody(GameOverCondition ending) {
+    switch (ending) {
+    case GameOverCondition::SuperEnding: return Lang::get("end_super_body");
+    case GameOverCondition::GoodEnding: return Lang::get("end_good_body");
+    case GameOverCondition::NormalEnding: return Lang::get("end_normal_body");
+    case GameOverCondition::Expelled: return Lang::get("end_expelled_body");
+    case GameOverCondition::AcademicLeave: return Lang::get("end_academic_body");
+    case GameOverCondition::MentalHospital: return Lang::get("end_mental_body");
+    case GameOverCondition::StarvedToDeath: return Lang::get("end_starved_body");
+    case GameOverCondition::EternalDebtor: return Lang::get("end_debtor_body");
+    case GameOverCondition::SecretRomantic: return Lang::get("end_romantic_body");
+    case GameOverCondition::SecretArmy: return Lang::get("end_army_body");
+    default: return Lang::get("end_unknown");
+    }
+}
+
+std::string EndingSystem::GetEndingText(GameOverCondition ending) {
+    return makeEndingFrame(endingTitle(ending) + " (" + gameOverToString(ending) + ")", endingBody(ending));
 }

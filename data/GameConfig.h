@@ -38,3 +38,14 @@ struct NPCMemoryEntry {
     int value = 0;
     bool triggered = false;
 };
+
+struct NPCAction {
+    std::string type;
+    int day;
+    int influence;
+    std::string location;
+    std::string emotion;
+    std::string result;
+    std::string category; // "helpful","rude","honest","pushy","generous","selfish","trust","romance"
+    bool fulfilledPromise;
+};

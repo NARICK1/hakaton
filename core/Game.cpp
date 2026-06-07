@@ -5,11 +5,18 @@
 #include "../systems/RelationshipSystem.h"
 #include "../systems/FatigueSystem.h"
 #include "../systems/HungerSystem.h"
+#include "../systems/DebuffSystem.h"
 #include "../exams/Exam.h"
+#include "../data/Lang.h"
 #include <iostream>
+#include <sstream>
 
 Game::Game() {
     ConsoleUI::SetConsoleUTF8();
+    // Load saved language preference
+    if (!UIModeManager::isRussian()) {
+        Lang::set(Lang::English);
+    }
 }
 
 void Game::initNPCs() {
@@ -37,16 +44,20 @@ void Game::run() {
             switch (Menu::MainMenuChoice()) {
             case 1:
                 initGame();
+                runPrologue();
                 break;
             case 2:
+                initNPCs();
                 loadGame();
                 if (state.isGameStarted()) {
-                    initNPCs();
                     state.setPhase(GamePhase::Playing);
                 }
                 break;
             case 3:
                 Menu::ShowControls();
+                break;
+            case 4:
+                Menu::ShowSettings();
                 break;
             case 0:
                 running = false;
@@ -67,17 +78,14 @@ void Game::run() {
             case 7: runDay7(); break;
             case 8: runDay8(); break;
             default:
-                // После 8 дня — оценка концовки
                 auto ending = EndingSystem::EvaluateEnding(state.getPlayer());
                 state.setGameOverReason(ending);
                 state.setPhase(GamePhase::GameOver);
                 break;
             }
 
-            // Проверяем концовку
             checkGameOver();
 
-            // Если день закончился и игра не окончена, переходим к следующему дню
             if (state.getPhase() == GamePhase::Playing) {
                 state.getPlayer().nextDay();
                 applyDailySystems();
@@ -92,6 +100,7 @@ void Game::run() {
             int choice = Menu::MainMenuChoice();
             if (choice == 1) {
                 initGame();
+                runPrologue();
             } else if (choice == 2 || choice == 0) {
                 state.setPhase(GamePhase::MainMenu);
             }
@@ -107,7 +116,7 @@ void Game::run() {
 void Game::applyDailySystems() {
     FatigueSystem::Update(state.getPlayer());
     HungerSystem::Update(state.getPlayer());
-    state.getPlayer().applyBuffs();
+    DebuffSystem::Update(state.getPlayer());
 }
 
 void Game::checkGameOver() {
@@ -119,6 +128,16 @@ void Game::checkGameOver() {
 }
 
 void Game::saveGame() {
+    // Serialize NPC memory into state
+    std::string npcData;
+    auto addNPCData = [&](const NPC& npc) {
+        npcData += npc.serialize() + "---NPC_END---\n";
+    };
+    addNPCData(*alla);
+    addNPCData(*bulat);
+    addNPCData(*semen);
+    addNPCData(*artem);
+    state.setNPCMemoryData(npcData);
     SaveManager::SaveGame(state);
 }
 
@@ -126,25 +145,137 @@ void Game::loadGame() {
     SaveManager::LoadGame(state);
     if (state.isGameStarted()) {
         state.setPhase(GamePhase::Playing);
+        // Restore NPC memory
+        std::string npcData = state.getNPCMemoryData();
+        if (!npcData.empty()) {
+            auto restoreNPC = [&](NPC& npc, const std::string& expectedName) {
+                size_t pos = npcData.find("---NPC_END---");
+                if (pos != std::string::npos) {
+                    std::string block = npcData.substr(0, pos);
+                    // Check if this block belongs to this NPC by finding the name
+                    if (block.find(expectedName) != std::string::npos) {
+                        npc.deserialize(block);
+                    }
+                    npcData = npcData.substr(pos + 13);
+                }
+            };
+            restoreNPC(*alla, "Алла");
+            restoreNPC(*bulat, "Булат");
+            restoreNPC(*semen, "Семён");
+            restoreNPC(*artem, "Артём");
+        }
     }
 }
 
-// ==================== СЦЕНЫ ПО ДНЯМ ====================
+void Game::recordNPCChoice(const std::string& npcName, const std::string& choiceKey, int value) {
+    NPC* npc = nullptr;
+    if (npcName == "Алла") npc = alla.get();
+    else if (npcName == "Булат") npc = bulat.get();
+    else if (npcName == "Семён") npc = semen.get();
+    else if (npcName == "Артём") npc = artem.get();
+    if (!npc) return;
+    npc->rememberEvent(choiceKey, value);
+
+    // Auto-record detailed action based on choiceKey
+    NPCAction action;
+    action.type = choiceKey;
+    action.day = state.getPlayer().getCurrentDay();
+    action.influence = std::abs(value);
+    action.location = locationToString(state.getPlayer().getLocation());
+    action.fulfilledPromise = true;
+
+    if (choiceKey == "helped_player") {
+        action.category = "helpful";
+        action.emotion = "благодарность";
+        action.result = "помог игроку";
+    } else if (choiceKey == "was_rude") {
+        action.category = "rude";
+        action.emotion = "обида";
+        action.result = "огорчён";
+    } else if (choiceKey == "compliment") {
+        action.category = "romance";
+        action.emotion = "приятно удивлена";
+        action.result = "понравился комплимент";
+    } else if (choiceKey == "refused_date") {
+        action.category = "selfish";
+        action.emotion = "разочарование";
+        action.result = "отказ от свидания";
+        action.fulfilledPromise = false;
+    } else if (choiceKey == "shared_info") {
+        action.category = "trust";
+        action.emotion = "доверие";
+        action.result = "поделился информацией";
+    } else if (choiceKey == "promise_broken") {
+        action.category = "selfish";
+        action.emotion = "обманут";
+        action.result = "нарушил обещание";
+        action.fulfilledPromise = false;
+    } else {
+        action.category = "helpful";
+        action.emotion = "нейтрально";
+        action.result = "взаимодействие";
+    }
+    npc->recordAction(action);
+}
+
+// ==================== ПРОЛОГ ====================
+
+void Game::runPrologue() {
+    ConsoleUI::ClearScreen();
+    int w = UIModeManager::screenW();
+    std::cout << BOX_TL << std::string(w, BOX_H[0]) << BOX_TR "\n";
+    std::cout << BOX_V << rpad("", w) << BOX_V "\n";
+    std::string prologueTitle = "ПРОЛОГ";
+    int lt = (w - static_cast<int>(visLen(prologueTitle + "  "))) / 2;
+    std::cout << BOX_V << rpad(std::string(lt, ' ') + prologueTitle, w) << BOX_V "\n";
+    std::cout << BOX_V << rpad("", w) << BOX_V "\n";
+    std::cout << BOX_L << std::string(w, BOX_H[0]) << BOX_R "\n";
+    std::cout << BOX_V << rpad("", w) << BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("Лето пролетело незаметно. Как будто только вчера", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("прозвенел последний звонок в школе, а сегодня ты уже", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("стоишь на пороге Уфимского университета науки и", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("технологий. В руках — потрёпанная папка с документами,", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("в голове — каша из ожиданий и страхов.", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("Первая сессия — это не просто экзамены.", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("Это проверка на прочность.", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V << rpad("", w) << BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("Твои друзья:", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("  Булат — лучший друг, весёлый и надёжный.", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("  Алла — одногруппница, умная и красивая.", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("  Семён — старшекурсник, циничный, но знающий.", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("  Артём — замкнутый гений программирования.", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V << rpad("", w) << BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("Впереди 8 дней, которые определят твою судьбу.", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("Сможешь ли ты выстоять?", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V << rpad("", w) << BOX_V "\n";
+    std::cout << BOX_V "  " << rpad("Твоя история начинается прямо сейчас...", w - 4) << "  " BOX_V "\n";
+    std::cout << BOX_V << rpad("", w) << BOX_V "\n";
+    std::cout << BOX_BL << std::string(w, BOX_H[0]) << BOX_BR "\n";
+    ConsoleUI::WaitForEnter();
+}
+
+// ==================== ДЕНЬ 1 — ИСТОРИЯ ====================
 
 void Game::runDay1() {
     ConsoleUI::PrintDayHeader(1, "История — первый экзамен");
-    std::cout << "\nПонедельник. Первый экзамен. История.\n";
-    std::cout << "Ты просыпаешься и понимаешь: сегодня решается твоя судьба.\n";
-    ConsoleUI::WaitForEnter();
 
     // Утро
-    ConsoleUI::PrintHeader("УТРО");
-    std::cout << "Булат стучит в дверь: «" << state.getPlayer().getName()
-              << ", вставай! Опоздаем на экзамен!»\n\n";
-    std::cout << "Твои действия:\n";
-    std::cout << "1. Вскочить и быстро собраться\n";
-    std::cout << "2. Попросить Булата подождать 5 минут\n";
-    std::cout << "3. Сказать, что идёшь один\n";
+    {
+        std::string morningText =
+            "Понедельник. Солнце только начинает пробиваться сквозь\n"
+            "шторы твоей комнаты в общежитии. За окном слышен шум\n"
+            "утреннего города — где-то сигналит машина, лает собака.\n"
+            "Разбудил тебя не будильник, а громкий стук в дверь.\n\n"
+            "Булат: «" + state.getPlayer().getName() + ", вставай! Через час экзамен!\n"
+            "Я уже готов, а ты ещё дрыхнешь! Соня несчастная!»\n\n"
+            "Ты смотришь на часы — 7:30. Первый экзамен в 9:00.\n"
+            "Сердце начинает биться быстрее. Сегодня всё решается.";
+        ConsoleUI::RenderScreen("УТРО", morningText,
+            {"Вскочить и быстро собраться за 5 минут",
+             "Попросить Булата подождать, собираться не спеша",
+             "Сказать, что идёшь один, пусть не ждёт"},
+            state.getPlayer(), ConsoleUI::GetBulatPortrait(), "Булат");
+    }
 
     int choice;
     std::cin >> choice;
@@ -152,39 +283,125 @@ void Game::runDay1() {
 
     switch (choice) {
     case 1:
-        std::cout << "\nТы быстро собираешься. Булат доволен твоей скоростью.\n";
-        state.getPlayer().modifyRelation("Булат", 3);
+        ConsoleUI::RenderScreen("УТРО", "Ты вскакиваешь, быстро умываешься, хватаешь конспект.\nБулат одобрительно свистит: «Молоток! Скорость — наше всё!»\nВы выбегаете вместе.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Булат", 5);
         state.getPlayer().getStats().energy -= 5;
         break;
     case 2:
-        std::cout << "\nБулат ждёт. Вы идёте вместе, обсуждая историю.\n";
-        state.getPlayer().modifyRelation("Булат", 5);
-        state.getPlayer().getStats().intellect += 2;
+        ConsoleUI::RenderScreen("УТРО", "Ты просишь Булата подождать. Пока ты собираешься,\nвы успеваете обсудить историю. Булат рассказывает\nпару интересных фактов про Древнюю Русь.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Булат", 7);
+        state.getPlayer().getStats().intellect += 3;
         break;
     case 3:
-        std::cout << "\nБулат уходит один. Ты чувствуешь лёгкую неловкость.\n";
+        ConsoleUI::RenderScreen("УТРО", "Булат уходит один. Ты чувствуешь лёгкую неловкость.\nНо хотя бы есть время спокойно собраться.",
+            {}, state.getPlayer());
         state.getPlayer().modifyRelation("Булат", -3);
         break;
+    default:
+        ConsoleUI::RenderScreen("УТРО", "Булат уходит, пожимая плечами.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Булат", -5);
+        break;
+    }
+    ConsoleUI::WaitForEnter();
+
+    // В коридоре перед экзаменом
+    {
+        std::string hallText =
+            "Коридор университета встречает тебя гулом голосов.\n"
+            "Возле 215-й аудитории толпятся студенты. Кто-то\n"
+            "лихорадочно листает конспекты, кто-то шепчет молитвы.\n"
+            "В воздухе пахнет кофе и канцелярией. На стенах —\n"
+            "стенды с расписанием и объявление о карантине.\n\n"
+            "Алла подходит к тебе с взволнованным лицом. Она\n"
+            "явно не спала полночи — под глазами круги, но\n"
+            "она всё равно улыбается:\n"
+            "«Привет! Я так переживаю... Ты готов?\n"
+            "Говорят, Елена Викторовна сегодня в плохом настроении.\n"
+            "Вчера она полгруппы отправила на пересдачу!»";
+        ConsoleUI::RenderScreen("ПЕРЕД ЭКЗАМЕНОМ", hallText,
+            {"Успокоить Аллу: «Всё будет хорошо, ты подготовилась»",
+             "Признаться, что сам не готов и паникуешь",
+             "Попросить Аллу помочь с последними вопросами",
+             "Игнорировать — сейчас не до разговоров"},
+            state.getPlayer(), ConsoleUI::GetAllaPortrait(), "Алла");
     }
 
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
+
+    switch (choice) {
+    case 1:
+        ConsoleUI::RenderScreen("АЛЛА", "Алла улыбается: «Спасибо, мне стало спокойнее.\nТы хороший друг.»",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Алла", 8);
+        state.getPlayer().getStats().romance += 3;
+        recordNPCChoice("Алла", "helped_player", 1);
+        break;
+    case 2:
+        ConsoleUI::RenderScreen("АЛЛА", "Алла вздыхает: «Мы оба в одной лодке...\nЛадно, удачи нам!»",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Алла", 2);
+        break;
+    case 3:
+        ConsoleUI::RenderScreen("АЛЛА", "Алла быстро пересказывает ключевые даты.\nТы чувствуешь, что стало чуть понятнее.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Алла", 10);
+        state.getPlayer().getStats().intellect += 4;
+        recordNPCChoice("Алла", "helped_player", 1);
+        break;
+    case 4:
+        ConsoleUI::RenderScreen("АЛЛА", "Алла отворачивается. Кажется, она обиделась.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Алла", -5);
+        recordNPCChoice("Алла", "was_rude", 1);
+        break;
+    }
     ConsoleUI::WaitForEnter();
 
     // Экзамен по истории
     ConsoleUI::PrintHeader("ЭКЗАМЕН ПО ИСТОРИИ");
     HistoryExam historyExam;
     historyExam.runExam(state.getPlayer());
-
     ConsoleUI::WaitForEnter();
 
     // После экзамена
-    ConsoleUI::PrintHeader("ПОСЛЕ ЭКЗАМЕНА");
-    std::cout << "Экзамен позади. Ты встречаешь Аллу в коридоре.\n";
-    alla->getDialog(state.getPlayer());
-    interactWithAlla();
+    {
+        std::string afterText =
+            "Экзамен позади. Ты выходишь из аудитории, чувствуя\n"
+            "невероятное облегчение. Солнце в коридоре кажется\n"
+            "ярче, чем было утром. Кто-то из группы обсуждает\n"
+            "вопросы билетов, кто-то уже спорит с преподавателем.\n\n"
+            "В коридоре тебя встречает Алла — она сдала раньше.\n"
+            "Она нервно теребит край тетради:\n"
+            "«Ну как? Рассказывай! Я чуть не умерла от ожидания!»";
+        ConsoleUI::RenderScreen("ПОСЛЕ ЭКЗАМЕНА", afterText,
+            {"Сказать, что всё отлично — лёгкий был экзамен",
+             "Признаться, что было трудно, но справился",
+             "Отмахнуться: «Да норм, бывало и хуже»"},
+            state.getPlayer());
+    }
 
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
+
+    switch (choice) {
+    case 1:
+        state.getPlayer().modifyRelation("Алла", 3);
+        state.getPlayer().getStats().humanity += 2;
+        break;
+    case 2:
+        state.getPlayer().modifyRelation("Алла", 5);
+        break;
+    case 3:
+        state.getPlayer().modifyRelation("Алла", -2);
+        state.getPlayer().getStats().humanity -= 2;
+        break;
+    }
     ConsoleUI::WaitForEnter();
 
-    // Случайное событие
     eventManager.tryTriggerEvent(state.getPlayer(), 1);
 
     ConsoleUI::PrintHeader("КОНЕЦ ДНЯ 1");
@@ -192,70 +409,117 @@ void Game::runDay1() {
     ConsoleUI::WaitForEnter();
 }
 
+// ==================== ДЕНЬ 2 — ЯИМП ====================
+
 void Game::runDay2() {
     ConsoleUI::PrintDayHeader(2, "Язык и математика программирования");
-    std::cout << "\nВторой экзамен — ЯиМП. Нужно собраться.\n";
-    ConsoleUI::WaitForEnter();
 
-    // Выбор локации
-    bool dayEnded = false;
-    while (!dayEnded) {
-        ConsoleUI::ClearScreen();
-        ConsoleUI::PrintDayHeader(2, "Язык и математика программирования");
-        ConsoleUI::PrintPlayerStats(state.getPlayer());
+    {
+        std::string text =
+            "Второй экзамен — Языки и методы программирования.\n"
+            "Михаил Олегович известен своими каверзными вопросами про C++.\n"
+            "Ты подходишь к университету и замечаешь Артёма,\n"
+            "который сидит на скамейке с ноутбуком.";
+        ConsoleUI::RenderScreen("ЭКЗАМЕН ЯИМП", text,
+            {"Подойти к Артёму, поздороваться",
+             "Пройти мимо — сейчас не до разговоров",
+             "Спросить у Артёма про экзамен"},
+            state.getPlayer(), ConsoleUI::GetArtemPortrait(), "Артём");
+    }
 
-        std::cout << "Куда хочешь пойти?\n";
-        std::cout << "1. Университет (экзамен)\n";
-        std::cout << "2. Дом (подготовиться)\n";
-        std::cout << "3. Столовая (поесть)\n";
-        std::cout << "4. Магазин\n";
-        std::cout << "5. Улица (проветриться)\n";
+    int choice;
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
 
-        int choice;
+    switch (choice) {
+    case 1: {
+        ConsoleUI::RenderScreen("АРТЁМ",
+            "Артём поднимает взгляд: «А, привет! Готов к плюсам?»\n"
+            "Он показывает тебе ноутбук с открытым кодом.\n"
+            "«Смотри, я написал шаблонный умный указатель.\n"
+            "Красота же, правда?»",
+            {"Посмотреть код и похвалить",
+             "Сказать, что сейчас не до программирования",
+             "Попросить объяснить шаблоны"},
+            state.getPlayer(), ConsoleUI::GetArtemPortrait(), "Артём");
+
         std::cin >> choice;
         std::cin.ignore(10000, '\n');
 
-        switch (choice) {
-        case 1: {
-            ConsoleUI::PrintHeader("ЭКЗАМЕН ПО ЯИМП");
-            YAMPExam yampExam;
-            yampExam.runExam(state.getPlayer());
-            eventManager.tryTriggerEvent(state.getPlayer(), 2);
-            ConsoleUI::WaitForEnter();
-            dayEnded = true;
-            break;
-        }
-        case 2: {
-            ConsoleUI::PrintHeader("ПОДГОТОВКА ДОМА");
-            std::cout << "Ты решаешь задачи и повторяешь материал.\n";
+        if (choice == 1) {
+            state.getPlayer().modifyRelation("Артём", 5);
+            state.getPlayer().getStats().intellect += 2;
+            recordNPCChoice("Артём", "helped_player", 1);
+        } else if (choice == 2) {
+            state.getPlayer().modifyRelation("Артём", -3);
+        } else if (choice == 3) {
+            state.getPlayer().modifyRelation("Артём", 8);
             state.getPlayer().getStats().intellect += 5;
-            state.getPlayer().getStats().energy -= 10;
-            state.getPlayer().advanceTime(120);
-            ConsoleUI::WaitForEnter();
-            break;
+            recordNPCChoice("Артём", "helped_player", 1);
         }
-        case 3: {
-            handleCanteenLocation();
-            break;
-        }
-        case 4: {
-            handleShopLocation();
-            break;
-        }
-        case 5: {
-            std::cout << "\nТы гуляешь по улице, размышляя о жизни.\n";
-            state.getPlayer().getStats().stress -= 5;
-            state.getPlayer().advanceTime(30);
-            ConsoleUI::WaitForEnter();
-            break;
-        }
-        }
+        ConsoleUI::WaitForEnter();
+        break;
+    }
+    case 2:
+        state.getPlayer().modifyRelation("Артём", -2);
+        break;
+    case 3: {
+        ConsoleUI::RenderScreen("АРТЁМ",
+            "Артём: «Экзамен? Да брось, это всё фигня.\n"
+            "Главное — понимать концепции, а не зубрить.\n"
+            "Вот смотри: полиморфизм — это...»\n"
+            "Он увлекается и объясняет 15 минут.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Артём", 5);
+        state.getPlayer().getStats().intellect += 3;
+        recordNPCChoice("Артём", "helped_player", 1);
+        ConsoleUI::WaitForEnter();
+        break;
+    }
+    }
+    ConsoleUI::WaitForEnter();
 
-        checkGameOver();
-        if (state.getPhase() != GamePhase::Playing) return;
+    // Экзамен ЯиМП
+    ConsoleUI::PrintHeader("ЭКЗАМЕН ПО ЯИМП");
+    YAMPExam yampExam;
+    yampExam.runExam(state.getPlayer());
+
+    // После экзамена
+    {
+        std::string afterText =
+            "После экзамена ты чувствуешь усталость.\n"
+            "В вестибюле сталкиваешься с Семёном.\n"
+            "Семён: «Ну как, сдал? А то у меня есть\n"
+            "интересная информация на будущее...»";
+        ConsoleUI::RenderScreen("ПОСЛЕ ЭКЗАМЕНА", afterText,
+            {"Расспросить Семёна про информацию",
+             "Сказать, что устал, и пойти домой",
+             "Предложить Семёну пойти поесть"},
+            state.getPlayer(), ConsoleUI::GetSemenPortrait(), "Семён");
     }
 
-    // Случайное событие
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
+
+    if (choice == 1) {
+        ConsoleUI::RenderScreen("СЕМЁН",
+            "Семён понижает голос:\n"
+            "«Короче, у меня есть контакты, где можно купить\n"
+            "ответы на матанализ. Если что — обращайся.»",
+            {}, state.getPlayer());
+        state.getPlayer().setFlag("knows_about_answers", true);
+        recordNPCChoice("Семён", "shared_info", 1);
+        ConsoleUI::WaitForEnter();
+    } else if (choice == 3) {
+        ConsoleUI::RenderScreen("СТОЛОВАЯ",
+            "Вы идёте в столовую. Семён рассказывает\n"
+            "байки про прошлые сессии.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Семён", 5);
+        HungerSystem::Eat(state.getPlayer(), 100);
+        ConsoleUI::WaitForEnter();
+    }
+
     eventManager.tryTriggerEvent(state.getPlayer(), 2);
 
     ConsoleUI::PrintHeader("КОНЕЦ ДНЯ 2");
@@ -263,91 +527,96 @@ void Game::runDay2() {
     ConsoleUI::WaitForEnter();
 }
 
+// ==================== ДЕНЬ 3 — ПОДГОТОВКА ====================
+
 void Game::runDay3() {
     ConsoleUI::PrintDayHeader(3, "Подготовка к дискретной математике");
-    std::cout << "\nДень подготовки к дискретной математике.\n";
-    std::cout << "Сегодня нет экзаменов. Можно подготовиться.\n";
-    ConsoleUI::WaitForEnter();
 
-    bool dayEnded = false;
-    while (!dayEnded) {
-        ConsoleUI::ClearScreen();
-        ConsoleUI::PrintDayHeader(3, "Подготовка к дискретной математике");
-        ConsoleUI::PrintPlayerStats(state.getPlayer());
+    {
+        std::string text =
+            "Третий день. Экзамена нет — чистая подготовка.\n"
+            "Завтра дискретная математика, один из самых сложных предметов.\n"
+            "Нужно решить, чем заняться сегодня.";
+        ConsoleUI::RenderScreen("ДЕНЬ ПОДГОТОВКИ", text,
+            {"Пойти в библиотеку готовиться к дискретке",
+             "Пойти на физкультуру (снять стресс)",
+             "Пойти на 3D-моделирование (доп. занятие)",
+             "Встретиться с Семёном и Аллой"},
+            state.getPlayer());
+    }
 
-        std::cout << "Чем займёшься?\n";
-        std::cout << "1. Изучать дискретную математику (библиотека)\n";
-        std::cout << "2. Встретиться с друзьями\n";
-        std::cout << "3. Пойти в столовую\n";
-        std::cout << "4. Пойти в магазин\n";
-        std::cout << "5. Гулять по улице\n";
-        std::cout << "6. Лечь спать (закончить день)\n";
+    int choice;
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
 
-        int choice;
+    switch (choice) {
+    case 1: {
+        ConsoleUI::RenderScreen("БИБЛИОТЕКА",
+            "Ты сидишь в библиотеке, штудируешь графы и матрицы.\n"
+            "Голова идёт кругом, но ты чувствуешь прогресс.",
+            {}, state.getPlayer());
+        state.getPlayer().getStats().intellect += 8;
+        state.getPlayer().getStats().fatigue += 15;
+        state.getPlayer().advanceTime(180);
+        break;
+    }
+    case 2: {
+        ConsoleUI::RenderScreen("ФИЗКУЛЬТУРА",
+            "Ты идёшь в спортзал. Полчаса бега, турник, растяжка.\n"
+            "Пот пробил, но в голове прояснилось.",
+            {}, state.getPlayer());
+        state.getPlayer().getStats().stress -= 15;
+        state.getPlayer().getStats().energy += 10;
+        state.getPlayer().getStats().fatigue += 10;
+        state.getPlayer().advanceTime(90);
+        break;
+    }
+    case 3: {
+        ConsoleUI::RenderScreen("3D-МОДЕЛИРОВАНИЕ",
+            "Ты идёшь на факультатив по 3D-моделированию.\n"
+            "Преподаватель показывает Blender.\n"
+            "Ты создаёшь примитивную модель чайника.\n"
+            "Это отвлекает от мыслей об экзаменах.",
+            {}, state.getPlayer());
+        state.getPlayer().getStats().stress -= 10;
+        state.getPlayer().getStats().intellect += 3;
+        state.getPlayer().advanceTime(120);
+        break;
+    }
+    case 4: {
+        ConsoleUI::RenderScreen("ВСТРЕЧА",
+            "Ты встречаешься с Семёном и Аллой в кафе.\n"
+            "Семён раздаёт советы, Алла смеётся над его шутками.\n"
+            "Вы обсуждаете предстоящие экзамены.",
+            {"Обсуждать учёбу и стратегию сдачи",
+             "Подшучивать над Семёном, флиртовать с Аллой",
+             "Просить помощи у обоих"},
+            state.getPlayer());
+
         std::cin >> choice;
         std::cin.ignore(10000, '\n');
 
-        switch (choice) {
-        case 1: {
-            std::cout << "\nТы идёшь в библиотеку и погружаешься в изучение графов.\n";
-            state.getPlayer().getStats().intellect += 8;
-            state.getPlayer().getStats().fatigue += 15;
-            state.getPlayer().advanceTime(180);
-            ConsoleUI::WaitForEnter();
-            break;
-        }
-        case 2: {
-            ConsoleUI::PrintHeader("ВСТРЕЧА С ДРУЗЬЯМИ");
-            std::cout << "Ты встречаешь Булата и Семёна.\n";
-
-            std::cout << "1. Обсуждать учёбу\n";
-            std::cout << "2. Просто болтать о жизни\n";
-            std::cout << "3. Попросить помощи с дискреткой\n";
-
-            int subChoice;
-            std::cin >> subChoice;
-            std::cin.ignore(10000, '\n');
-
-            if (subChoice == 1) {
-                state.getPlayer().getStats().intellect += 3;
-                state.getPlayer().modifyRelation("Булат", 3);
-                state.getPlayer().modifyRelation("Семён", 3);
-            } else if (subChoice == 2) {
-                state.getPlayer().getStats().stress -= 10;
-                state.getPlayer().modifyRelation("Булат", 5);
-                state.getPlayer().modifyRelation("Семён", 3);
-            } else if (subChoice == 3) {
-                state.getPlayer().getStats().intellect += 6;
-                state.getPlayer().modifyRelation("Булат", 5);
-                state.getPlayer().modifyRelation("Семён", 5);
-            }
-
-            state.getPlayer().advanceTime(90);
-            ConsoleUI::WaitForEnter();
-            break;
-        }
-        case 3:
-            handleCanteenLocation();
-            break;
-        case 4:
-            handleShopLocation();
-            break;
-        case 5: {
-            std::cout << "\nТы гуляешь по городу. Встречаешь Артёма.\n";
-            interactWithArtem();
+        if (choice == 1) {
+            state.getPlayer().getStats().intellect += 3;
+            state.getPlayer().modifyRelation("Семён", 3);
+            state.getPlayer().modifyRelation("Алла", 3);
+        } else if (choice == 2) {
+            state.getPlayer().modifyRelation("Алла", 5);
+            state.getPlayer().modifyRelation("Семён", 2);
+            state.getPlayer().getStats().romance += 3;
             state.getPlayer().getStats().stress -= 5;
-            state.getPlayer().advanceTime(60);
-            ConsoleUI::WaitForEnter();
-            break;
+        } else {
+            state.getPlayer().getStats().intellect += 5;
+            state.getPlayer().modifyRelation("Семён", 5);
+            state.getPlayer().modifyRelation("Алла", 5);
+            recordNPCChoice("Алла", "helped_player", 1);
+            recordNPCChoice("Семён", "helped_player", 1);
         }
-        case 6:
-            dayEnded = true;
-            break;
-        }
-
-        checkGameOver();
-        if (state.getPhase() != GamePhase::Playing) return;
+        state.getPlayer().advanceTime(120);
+        break;
     }
+    }
+    ConsoleUI::WaitForEnter();
 
     eventManager.tryTriggerEvent(state.getPlayer(), 3);
 
@@ -356,63 +625,144 @@ void Game::runDay3() {
     ConsoleUI::WaitForEnter();
 }
 
+// ==================== ДЕНЬ 4 — ДИСКРЕТНАЯ МАТЕМАТИКА ====================
+
 void Game::runDay4() {
     ConsoleUI::PrintDayHeader(4, "Дискретная математика");
-    std::cout << "\nЭкзамен по дискретной математике.\n";
-    std::cout << "Это один из самых сложных экзаменов.\n";
-    ConsoleUI::WaitForEnter();
 
-    // Встреча с Семёном перед экзаменом
-    ConsoleUI::PrintHeader("ПЕРЕД ЭКЗАМЕНОМ");
-    std::cout << "Семён подходит к тебе перед аудиторией:\n";
-    std::cout << "«" << state.getPlayer().getName() << ", давай шпаргалку? "
-              << "У меня есть отличная.\n";
-    std::cout << "1. Взять шпаргалку\n";
-    std::cout << "2. Отказаться — надеяться на свои знания\n";
-    std::cout << "3. Попросить объяснить сложные моменты\n";
+    // Ночь перед экзаменом
+    {
+        std::string nightText =
+            "Ночь перед экзаменом по дискретной математике.\n"
+            "Ты ворочаешься в постели. Сон не идёт.\n"
+            "Мысли путаются: графы, деревья, булевы функции...";
+        ConsoleUI::RenderScreen("НОЧЬ ПЕРЕД ЭКЗАМЕНОМ", nightText,
+            {"Встать и ещё раз пролистать конспект",
+             "Остаться в постели — здоровье важнее",
+             "Включить игры на телефоне, чтобы отвлечься"},
+            state.getPlayer());
+    }
 
     int choice;
     std::cin >> choice;
     std::cin.ignore(10000, '\n');
 
-    switch (choice) {
-    case 1:
-        std::cout << "\nТы берёшь шпаргалку. Семён одобрительно кивает.\n";
-        state.getPlayer().modifyRelation("Семён", 5);
-        state.getPlayer().setFlag("took_cheat_sheet");
-        state.getPlayer().getStats().humanity -= 5;
-        break;
-    case 2:
-        std::cout << "\nТы отказываешься. Семён пожимает плечами.\n";
-        state.getPlayer().modifyRelation("Семён", -2);
-        state.getPlayer().getStats().humanity += 5;
-        break;
-    case 3:
-        std::cout << "\nСемён быстро объясняет сложные моменты.\n";
+    if (choice == 1) {
+        ConsoleUI::RenderScreen("НОЧЬ", "Ты включаешь свет и читаешь конспект до 2 часов ночи.",
+            {}, state.getPlayer());
         state.getPlayer().getStats().intellect += 5;
-        state.getPlayer().modifyRelation("Семён", 3);
-        break;
+        state.getPlayer().getStats().fatigue += 15;
+        state.getPlayer().getStats().energy -= 10;
+    } else if (choice == 2) {
+        ConsoleUI::RenderScreen("НОЧЬ", "Ты закрываешь глаза и проваливаешься в сон.",
+            {}, state.getPlayer());
+        state.getPlayer().getStats().energy += 15;
+    } else {
+        ConsoleUI::RenderScreen("НОЧЬ", "Ты играешь в мобильную игру до часу ночи.\nУтром жалеешь об этом.",
+            {}, state.getPlayer());
+        state.getPlayer().getStats().energy -= 5;
+        state.getPlayer().getStats().stress -= 3;
+        state.getPlayer().getStats().fatigue += 5;
     }
-
     ConsoleUI::WaitForEnter();
 
-    // Экзамен
+    // Утро. Булат
+    {
+        std::string morningText =
+            "Утром тебя встречает Булат.\n"
+            "Он выглядит встревоженным:\n"
+            "«Слышал, у Натальи Петровны сегодня разнос.\n"
+            "Говорят, половина группы завалит.»";
+        ConsoleUI::RenderScreen("УТРО С БУЛАТОМ", morningText,
+            {"Спросить, нужна ли Булату помощь",
+             "Сказать, что сам в панике",
+             "Пошутить, чтобы разрядить обстановку"},
+            state.getPlayer(), ConsoleUI::GetBulatPortrait(), "Булат");
+    }
+
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
+
+    if (choice == 1) {
+        ConsoleUI::RenderScreen("БУЛАТ", "Булат благодарит: «Спасибо, брат! Ты настоящий друг.\nДавай вместе повторим определения.»",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Булат", 10);
+        state.getPlayer().getStats().intellect += 2;
+        recordNPCChoice("Булат", "helped_player", 1);
+    } else if (choice == 2) {
+        ConsoleUI::RenderScreen("БУЛАТ", "Булат вздыхает: «Ну, мы вместе прорвёмся... или вместе завалим.»",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Булат", 3);
+    } else {
+        ConsoleUI::RenderScreen("БУЛАТ", "Булат смеётся: «С тобой не соскучишься! Ладно, пошли уже.»",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Булат", 5);
+        state.getPlayer().getStats().stress -= 5;
+    }
+    ConsoleUI::WaitForEnter();
+
+    // Перед экзаменом — Семён предлагает шпаргалку
+    {
+        ConsoleUI::RenderScreen("ПЕРЕД ЭКЗАМЕНОМ",
+            "Перед аудиторией к тебе подходит Семён.\n"
+            "Он оглядывается по сторонам и говорит вполголоса:\n"
+            "«Псс, " + state.getPlayer().getName() + "! Держи шпору.\n"
+            "Я её вчера составил. Там все формулы по графам.\n"
+            "Пользоваться или нет — решай сам.»",
+            {"Взять шпаргалку — пригодится",
+             "Отказаться — надеяться на свои знания",
+             "Попросить объяснить сложные моменты устно"},
+            state.getPlayer(), ConsoleUI::GetSemenPortrait(), "Семён");
+    }
+
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
+
+    if (choice == 1) {
+        ConsoleUI::RenderScreen("ВЫБОР",
+            "Ты быстро прячешь шпаргалку в карман.\n"
+            "Семён одобрительно кивает.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Семён", 5);
+        state.getPlayer().setFlag("took_cheat_sheet", true);
+        state.getPlayer().getStats().humanity -= 5;
+    } else if (choice == 2) {
+        ConsoleUI::RenderScreen("ВЫБОР",
+            "Ты отказываешься. Семён пожимает плечами:\n"
+            "««Дело твоё. Удачи.»»",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Семён", -2);
+        state.getPlayer().getStats().humanity += 5;
+    } else {
+        ConsoleUI::RenderScreen("ВЫБОР",
+            "Семён быстро, шёпотом объясняет ключевые моменты.\n"
+            "Ты чувствуешь, что стало немного понятнее.",
+            {}, state.getPlayer());
+        state.getPlayer().getStats().intellect += 5;
+        state.getPlayer().modifyRelation("Семён", 3);
+        recordNPCChoice("Семён", "helped_player", 1);
+    }
+    ConsoleUI::WaitForEnter();
+
+    // Экзамен по дискретной математике
     ConsoleUI::PrintHeader("ЭКЗАМЕН ПО ДИСКРЕТНОЙ МАТЕМАТИКЕ");
     DiscreteExam discreteExam;
     int score = discreteExam.runExam(state.getPlayer());
 
-    // Если взял шпаргалку, бонус
     if (state.getPlayer().hasFlag("took_cheat_sheet") && score < 50) {
-        std::cout << "\nШпаргалка помогла! +10 баллов.\n";
+        ConsoleUI::RenderScreen("ШПАРГАЛКА",
+            "Шпаргалка помогла! Ты подсмотрел пару формул.\n+10 баллов к результату.",
+            {}, state.getPlayer());
         score = std::min(100, score + 10);
         state.getPlayer().setGrade(3, score);
+        ConsoleUI::WaitForEnter();
     }
 
     ConsoleUI::WaitForEnter();
 
     // После экзамена
     ConsoleUI::PrintHeader("ПОСЛЕ ЭКЗАМЕНА");
-    std::cout << "После экзамена ты встречаешь Аллу.\n";
+    std::cout << BOX_V " После экзамена ты встречаешь Аллу.\n";
     interactWithAlla();
 
     eventManager.tryTriggerEvent(state.getPlayer(), 4);
@@ -422,19 +772,23 @@ void Game::runDay4() {
     ConsoleUI::WaitForEnter();
 }
 
+// ==================== ДЕНЬ 5 — МАТАНАЛИЗ ====================
+
 void Game::runDay5() {
     ConsoleUI::PrintDayHeader(5, "Математический анализ");
-    std::cout << "\nЭкзамен по матанализу.\n";
-    std::cout << "Самый страшный экзамен для всех студентов.\n";
-    ConsoleUI::WaitForEnter();
 
-    // Утро перед экзаменом
-    ConsoleUI::PrintHeader("УТРО ПЕРЕД ЭКЗАМЕНОМ");
-    std::cout << "Алла подходит к тебе с обеспокоенным видом:\n";
-    std::cout << "«Привет! Ты готов? Я так переживаю...\n";
-    std::cout << "1. Подбодрить Аллу\n";
-    std::cout << "2. Сказать, что сам в панике\n";
-    std::cout << "3. Предложить готовиться вместе\n";
+    {
+        ConsoleUI::RenderScreen("УТРО ПЕРЕД МАТАНОМ",
+            "Самый страшный экзамен — матанализ.\n"
+            "Алла подходит к тебе с обеспокоенным лицом:\n"
+            "«Привет... Ты как? Я всю ночь не спала,\n"
+            "всё повторяла ряды и интегралы.»",
+            {"Подбодрить Аллу: «Ты умница, всё сдашь!»",
+             "Сказать, что сам в панике и ничего не знаешь",
+             "Предложить повторить вместе перед экзаменом",
+             "Сказать, что купил ответы у Семёна"},
+            state.getPlayer(), ConsoleUI::GetAllaPortrait(), "Алла");
+    }
 
     int choice;
     std::cin >> choice;
@@ -442,58 +796,109 @@ void Game::runDay5() {
 
     switch (choice) {
     case 1:
-        std::cout << "\nАлла улыбается: «Спасибо, мне стало легче!»\n";
-        state.getPlayer().modifyRelation("Алла", 8);
-        state.getPlayer().getStats().romance += 3;
+        ConsoleUI::RenderScreen("АЛЛА", "Алла улыбается: «Спасибо, мне правда стало легче.\nТы очень поддерживаешь меня.»",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Алла", 10);
+        state.getPlayer().getStats().romance += 5;
+        recordNPCChoice("Алла", "helped_player", 1);
         break;
     case 2:
-        std::cout << "\nАлла вздыхает: «Да уж, мы оба в одной лодке...»\n";
+        ConsoleUI::RenderScreen("АЛЛА", "Алла вздыхает: «Мы оба в одной лодке... Ну, поплыли.»",
+            {}, state.getPlayer());
         state.getPlayer().modifyRelation("Алла", 2);
         break;
     case 3:
-        std::cout << "\nВы вместе повторяете интегралы. Алла благодарна.\n";
-        state.getPlayer().modifyRelation("Алла", 10);
+        ConsoleUI::RenderScreen("АЛЛА", "Вы садитесь на подоконник и полчаса повторяете интегралы.\nАлла благодарна за компанию.",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Алла", 12);
         state.getPlayer().getStats().romance += 5;
         state.getPlayer().getStats().intellect += 3;
         break;
+    case 4: {
+        std::string cheatText =
+            "Алла удивлённо поднимает брови:\n"
+            "«Ты купил ответы? Ну... надеюсь, тебя не поймают.\n"
+            "Я буду сдавать честно.»";
+        if (state.getPlayer().getStats().humanity > 50) {
+            cheatText += "\n\nТы чувствуешь укол совести.";
+        }
+        ConsoleUI::RenderScreen("АЛЛА", cheatText, {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Алла", -3);
+        state.getPlayer().getStats().humanity -= 10;
+        ConsoleUI::WaitForEnter();
+
+        // Возможность купить ответы
+        ConsoleUI::RenderScreen("ПОКУПКА ОТВЕТОВ",
+            "Ты находишь Семёна. Он продаёт ответы за 300 руб.\n"
+            "Купишь?",
+            {"Купить ответы за 300 руб",
+             "Передумать и надеяться на свои силы"},
+            state.getPlayer());
+
+        std::cin >> choice;
+        std::cin.ignore(10000, '\n');
+
+        if (choice == 1 && state.getPlayer().getStats().money >= 300) {
+            state.getPlayer().getStats().money -= 300;
+            state.getPlayer().setFlag("bought_answers", true);
+            ConsoleUI::RenderScreen("ПОКУПКА", "Ответы у тебя. Осталось только списать.", {}, state.getPlayer());
+        } else {
+            state.getPlayer().setFlag("bought_answers", false);
+            ConsoleUI::RenderScreen("ПОКУПКА", "Ты решаешь положиться на свои знания.", {}, state.getPlayer());
+        }
+        ConsoleUI::WaitForEnter();
+        break;
+    }
+    }
+    ConsoleUI::WaitForEnter();
+
+    // Экзамен по матанализу
+    ConsoleUI::PrintHeader("ЭКЗАМЕН ПО МАТАНАЛИЗУ");
+    CalculusExam calculusExam;
+    int score = calculusExam.runExam(state.getPlayer());
+
+    if (state.getPlayer().hasFlag("bought_answers") && score < 50) {
+        ConsoleUI::RenderScreen("ОТВЕТЫ", "Купленные ответы помогли! +15 баллов.", {}, state.getPlayer());
+        score = std::min(100, score + 15);
+        state.getPlayer().setGrade(4, score);
+        ConsoleUI::WaitForEnter();
     }
 
     ConsoleUI::WaitForEnter();
 
-    // Экзамен
-    ConsoleUI::PrintHeader("ЭКЗАМЕН ПО МАТАНАЛИЗУ");
-    CalculusExam calculusExam;
-    calculusExam.runExam(state.getPlayer());
-
-    ConsoleUI::WaitForEnter();
-
-    // После экзамена встреча с Булатом
-    ConsoleUI::PrintHeader("ПОСЛЕ ЭКЗАМЕНА");
-    std::cout << "Булат зовёт тебя отметить окончание сложного экзамена.\n";
-    std::cout << "1. Пойти с Булатом\n";
-    std::cout << "2. Отказаться — нужно готовиться к следующему\n";
-    std::cout << "3. Пойти, но ненадолго\n";
+    // После экзамена — Булат зовёт отметить
+    {
+        ConsoleUI::RenderScreen("ПОСЛЕ МАТАНА",
+            "После изнурительного экзамена к тебе подходит Булат:\n"
+            "«Фух... Это было жёстко. Надо отметить,\n"
+            "что мы выжили! Пошли в бар?»",
+            {"Пойти с Булатом — заслужили отдых",
+             "Отказаться — нужно готовиться к следующему",
+             "Пойти, но ненадолго"},
+            state.getPlayer(), ConsoleUI::GetBulatPortrait(), "Булат");
+    }
 
     std::cin >> choice;
     std::cin.ignore(10000, '\n');
 
-    switch (choice) {
-    case 1:
-        std::cout << "\nВы хорошо проводите время. Настроение улучшается!\n";
+    if (choice == 1) {
+        ConsoleUI::RenderScreen("БАР", "Вы идёте в бар, берёте по пиву.\nОбсуждаете экзамены, смеётесь над преподавателями.\nНастроение улучшается!",
+            {}, state.getPlayer());
         state.getPlayer().modifyRelation("Булат", 8);
         state.getPlayer().getStats().stress -= 15;
         state.getPlayer().getStats().fatigue += 10;
-        break;
-    case 2:
-        std::cout << "\nБулат понимающе кивает: «Удачи с подготовкой!»\n";
-        state.getPlayer().modifyRelation("Булат", -2);
-        break;
-    case 3:
-        std::cout << "\nВы немного гуляете, но ты быстро возвращаешься домой.\n";
+        state.getPlayer().getStats().money -= 200;
+    } else if (choice == 3) {
+        ConsoleUI::RenderScreen("ПРОГУЛКА", "Вы гуляете полчаса, обсуждаете планы.\nБулат понимает, что тебе нужно готовиться.",
+            {}, state.getPlayer());
         state.getPlayer().modifyRelation("Булат", 5);
         state.getPlayer().getStats().stress -= 5;
-        break;
+    } else {
+        ConsoleUI::RenderScreen("ОТКАЗ", "Булат понимающе кивает: «Удачи с подготовкой, брат!»",
+            {}, state.getPlayer());
+        state.getPlayer().modifyRelation("Булат", -2);
     }
+    ConsoleUI::WaitForEnter();
 
     eventManager.tryTriggerEvent(state.getPlayer(), 5);
 
@@ -502,175 +907,319 @@ void Game::runDay5() {
     ConsoleUI::WaitForEnter();
 }
 
+// ==================== ДЕНЬ 6 — ВЫХОДНОЙ ====================
+
 void Game::runDay6() {
     ConsoleUI::PrintDayHeader(6, "Выходной");
-    std::cout << "\nНаконец-то выходной! Можно отдохнуть.\n";
-    std::cout << "Сегодня нет экзаменов. Ты сам решаешь, чем заняться.\n";
-    ConsoleUI::WaitForEnter();
-
     state.getPlayer().setFlag("day7_available", true);
 
-    bool dayEnded = false;
-    while (!dayEnded) {
-        ConsoleUI::ClearScreen();
-        ConsoleUI::PrintDayHeader(6, "Выходной");
-        ConsoleUI::PrintPlayerStats(state.getPlayer());
+    {
+        ConsoleUI::RenderScreen("УТРО ВЫХОДНОГО",
+            "Наконец-то выходной! Экзаменов нет.\n"
+            "Можно выдохнуть и заняться чем угодно.\n"
+            "Что будешь делать?",
+            {"Отдыхать дома (спать, есть, смотреть сериалы)",
+             "Пойти работать (подработка, +деньги)",
+             "Пойти гулять по городу",
+             "Встретиться с друзьями",
+             "Позвонить Алле"},
+            state.getPlayer());
+    }
 
-        std::cout << "Чем хочешь заняться?\n";
-        std::cout << "1. Отдыхать дома (спать, есть, смотреть сериалы)\n";
-        std::cout << "2. Пойти гулять по городу\n";
-        std::cout << "3. Встретиться с друзьями\n";
-        std::cout << "4. Сходить в магазин\n";
-        std::cout << "5. Цветочный магазин\n";
-        std::cout << "6. Закончить день\n";
+    int choice;
+    std::cin >> choice;
+    std::cin.ignore(10000, '\n');
 
-        int choice;
+    switch (choice) {
+    case 1:
+        ConsoleUI::RenderScreen("ДОМА",
+            "Ты отдыхаешь дома: спишь до обеда, смотришь\n"
+            "Netflix, заказываешь пиццу. Благодать.",
+            {}, state.getPlayer());
+        state.getPlayer().getStats().energy += 40;
+        state.getPlayer().getStats().fatigue -= 30;
+        state.getPlayer().getStats().hunger += 10;
+        state.getPlayer().getStats().stress -= 15;
+        state.getPlayer().advanceTime(360);
+        break;
+    case 2: {
+        ConsoleUI::RenderScreen("РАБОТА",
+            "Ты идёшь на подработку в кофейню.\n"
+            "Несколько часов за стойкой — и деньги в кармане.",
+            {"Работать бариста (+300 руб)",
+             "Работать курьером (+400 руб, но устанешь)"},
+            state.getPlayer());
+
         std::cin >> choice;
         std::cin.ignore(10000, '\n');
 
-        switch (choice) {
-        case 1: {
-            std::cout << "\nТы отдыхаешь дома. Силы восстанавливаются.\n";
-            state.getPlayer().getStats().energy += 40;
-            state.getPlayer().getStats().fatigue -= 30;
-            state.getPlayer().getStats().hunger += 10;
-            state.getPlayer().getStats().stress -= 15;
-            state.getPlayer().advanceTime(240);
-            ConsoleUI::WaitForEnter();
-            break;
+        if (choice == 1) {
+            state.getPlayer().getStats().money += 300;
+            state.getPlayer().getStats().fatigue += 10;
+            state.getPlayer().getStats().energy -= 10;
+        } else {
+            state.getPlayer().getStats().money += 400;
+            state.getPlayer().getStats().fatigue += 20;
+            state.getPlayer().getStats().energy -= 20;
         }
-        case 2: {
-            std::cout << "\nТы гуляешь по городу. Встречаешь Аллу!\n";
-            interactWithAlla();
-
-            std::cout << "\nПрогулка продолжается...\n";
-            state.getPlayer().getStats().stress -= 10;
-            state.getPlayer().advanceTime(90);
-            ConsoleUI::WaitForEnter();
-            break;
-        }
-        case 3: {
-            std::cout << "\nТы встречаешься с Булатом и Семёном.\n";
-            std::cout << "1. Играть в настольные игры\n";
-            std::cout << "2. Обсуждать учёбу\n";
-            std::cout << "3. Просто болтать\n";
-
-            int subChoice;
-            std::cin >> subChoice;
-            std::cin.ignore(10000, '\n');
-
-            if (subChoice == 1) {
-                state.getPlayer().getStats().stress -= 15;
-                state.getPlayer().modifyRelation("Булат", 5);
-                state.getPlayer().modifyRelation("Семён", 3);
-            } else if (subChoice == 2) {
-                state.getPlayer().getStats().intellect += 4;
-                state.getPlayer().modifyRelation("Семён", 5);
-            } else {
-                state.getPlayer().getStats().stress -= 8;
-                state.getPlayer().modifyRelation("Булат", 3);
-                state.getPlayer().modifyRelation("Семён", 3);
-            }
-            state.getPlayer().advanceTime(120);
-            ConsoleUI::WaitForEnter();
-            break;
-        }
-        case 4:
-            handleShopLocation();
-            break;
-        case 5:
-            handleFlowerShopLocation();
-            break;
-        case 6:
-            dayEnded = true;
-            break;
-        }
-
-        checkGameOver();
-        if (state.getPhase() != GamePhase::Playing) return;
+        state.getPlayer().advanceTime(240);
+        break;
     }
+    case 3:
+        ConsoleUI::RenderScreen("ПРОГУЛКА",
+            "Ты гуляешь по городу. Солнце, птицы, мороженое.\n"
+            "Жизнь прекрасна, когда нет экзаменов.",
+            {}, state.getPlayer());
+        state.getPlayer().getStats().stress -= 15;
+        state.getPlayer().getStats().energy += 5;
+        state.getPlayer().advanceTime(120);
+        break;
+    case 4: {
+        ConsoleUI::RenderScreen("ДРУЗЬЯ",
+            "Ты встречаешься с Булатом и Семёном.\n"
+            "Булат предлагает сыграть в настолки.",
+            {"Согласиться — отдохнуть и повеселиться",
+             "Обсуждать учёбу и стратегию"},
+            state.getPlayer());
+
+        std::cin >> choice;
+        std::cin.ignore(10000, '\n');
+
+        if (choice == 1) {
+            state.getPlayer().getStats().stress -= 20;
+            state.getPlayer().modifyRelation("Булат", 5);
+            state.getPlayer().modifyRelation("Семён", 3);
+        } else {
+            state.getPlayer().getStats().intellect += 4;
+            state.getPlayer().modifyRelation("Семён", 5);
+        }
+        state.getPlayer().advanceTime(150);
+        break;
+    }
+    case 5: {
+        ConsoleUI::RenderScreen("ЗВОНОК АЛЛЕ",
+            "Ты набираешь номер Аллы.\n"
+            "Она отвечает после второго гудка:\n"
+            "«Привет! А я как раз думала, что ты не позвонишь.»\n\n"
+            "О чём будешь говорить?",
+            {"Спросить, как у неё дела",
+             "Позвать гулять",
+             "Обсудить предстоящие экзамены",
+             "Сказать комплимент"},
+            state.getPlayer());
+
+        std::cin >> choice;
+        std::cin.ignore(10000, '\n');
+
+        if (choice == 1) {
+            state.getPlayer().modifyRelation("Алла", 5);
+            state.getPlayer().getStats().romance += 3;
+        } else if (choice == 2) {
+            state.getPlayer().modifyRelation("Алла", 8);
+            state.getPlayer().getStats().romance += 5;
+            state.getPlayer().setFlag("invited_alla_to_walk", true);
+        } else if (choice == 3) {
+            state.getPlayer().modifyRelation("Алла", 3);
+            state.getPlayer().getStats().intellect += 2;
+        } else {
+            state.getPlayer().modifyRelation("Алла", 10);
+            state.getPlayer().getStats().romance += 8;
+            recordNPCChoice("Алла", "compliment", 1);
+        }
+        ConsoleUI::RenderScreen("ТЕЛЕФОН",
+            "Вы болтаете около часа. Настроение отличное!",
+            {}, state.getPlayer());
+        state.getPlayer().advanceTime(60);
+        break;
+    }
+    }
+    ConsoleUI::WaitForEnter();
 
     eventManager.tryTriggerEvent(state.getPlayer(), 6);
 
-    ConsoleUI::PrintHeader("КОНЕЦ ДНЯ 6 — ВЫХОДНОГО");
+    ConsoleUI::PrintHeader("КОНЕЦ ДНЯ 6");
     ConsoleUI::PrintPlayerStats(state.getPlayer());
     ConsoleUI::WaitForEnter();
 }
 
+// ==================== ДЕНЬ 7 — СВИДАНИЕ ====================
+
 void Game::runDay7() {
     ConsoleUI::PrintDayHeader(7, "Свидание");
-    std::cout << "\nСегодня особенный день.\n";
 
     if (state.getPlayer().getRelation("Алла") >= 60 && state.getPlayer().getStats().romance >= 30) {
-        std::cout << "Алла сама подходит к тебе и говорит:\n";
-        std::cout << "«Сегодня я хочу провести этот день с тобой.\n";
-        std::cout << "Если ты, конечно, не против...»\n";
-
-        ConsoleUI::WaitForEnter();
-
-        ConsoleUI::PrintHeader("СВИДАНИЕ С АЛЛОЙ");
-        std::cout << "Куда пойдёте?\n";
-        std::cout << "1. Кафе — уютная атмосфера\n";
-        std::cout << "2. Парк — прогулка на свежем воздухе\n";
-        std::cout << "3. Кино — классика свиданий\n";
+        {
+            std::string dateText =
+                "Сегодня особенный день.\n"
+                "Алла сама подходит к тебе после пар:\n"
+                "«Привет! Я подумала... может, сходим\n"
+                "куда-нибудь сегодня?»\n"
+                "Твоё сердце пропускает удар.";
+            ConsoleUI::RenderScreen("ПРИГЛАШЕНИЕ", dateText,
+                {"Согласиться — конечно, с удовольствием!",
+                 "Сказать, что нужно готовиться к экзамену"},
+                state.getPlayer(), ConsoleUI::GetAllaPortrait(), "Алла");
+        }
 
         int choice;
         std::cin >> choice;
         std::cin.ignore(10000, '\n');
 
-        switch (choice) {
-        case 1:
-            std::cout << "\nВы сидите в уютном кафе, разговариваете обо всём.\n";
-            std::cout << "Алла рассказывает о своих мечтах.\n";
-            state.getPlayer().modifyRelation("Алла", 15);
-            state.getPlayer().getStats().romance += 15;
-            state.getPlayer().getStats().money -= 300;
-            break;
-        case 2:
-            std::cout << "\nВы гуляете по парку, кормите уток.\n";
-            std::cout << "Алла смеётся над твоими шутками.\n";
-            state.getPlayer().modifyRelation("Алла", 12);
-            state.getPlayer().getStats().romance += 12;
-            state.getPlayer().getStats().stress -= 10;
-            break;
-        case 3:
-            std::cout << "\nВы смотрите фильм. Алла прижимается к тебе.\n";
-            std::cout << "Это был отличный вечер.\n";
-            state.getPlayer().modifyRelation("Алла", 10);
-            state.getPlayer().getStats().romance += 10;
-            state.getPlayer().getStats().money -= 200;
-            break;
+        if (choice == 2) {
+            ConsoleUI::RenderScreen("ОТКАЗ",
+                "Алла разочарованно вздыхает:\n"
+                "«Ну... ладно. Понимаю. В другой раз.»\n"
+                "Ты чувствуешь, что упустил что-то важное.",
+                {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Алла", -10);
+            state.getPlayer().getStats().romance -= 5;
+            recordNPCChoice("Алла", "refused_date", 1);
+            ConsoleUI::WaitForEnter();
+            goto day7_skip_date;
         }
 
+        // Куда пойти?
+        ConsoleUI::RenderScreen("КУДА ПОЙТИ?",
+            "Алла ждёт твоего предложения. Куда пойдёте?",
+            {"В кафе — уютная атмосфера, вкусные десерты",
+             "В парк — прогулка на свежем воздухе",
+             "В кино — классика свиданий"},
+            state.getPlayer(), ConsoleUI::GetAllaPortrait(), "Алла");
+
+        std::cin >> choice;
+        std::cin.ignore(10000, '\n');
+
+        std::string dateResult;
+        int moneyCost = 0;
+        if (choice == 1) {
+            dateResult =
+                "Вы сидите в уютном кафе при свечах.\n"
+                "Алла заказывает чизкейк, ты — капучино.\n"
+                "Вы говорите обо всём на свете.\n"
+                "Алла рассказывает, что мечтает путешествовать.";
+            moneyCost = 400;
+        } else if (choice == 2) {
+            dateResult =
+                "Вы гуляете по центральному парку.\n"
+                "Кормите уток в пруду, катаетесь на колесе обозрения.\n"
+                "На закате Алла кладёт голову тебе на плечо.";
+            moneyCost = 200;
+        } else {
+            dateResult =
+                "Вы идёте на новый фильм.\n"
+                "В зале темно, и Алла берёт тебя за руку.\n"
+                "Ты больше смотришь на неё, чем на экран.";
+            moneyCost = 300;
+        }
+
+        if (state.getPlayer().getStats().money >= moneyCost) {
+            state.getPlayer().getStats().money -= moneyCost;
+            ConsoleUI::RenderScreen("СВИДАНИЕ", dateResult, {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Алла", 15);
+            state.getPlayer().getStats().romance += 12;
+            state.getPlayer().getStats().stress -= 15;
+        } else {
+            ConsoleUI::RenderScreen("СВИДАНИЕ",
+                "У тебя не хватает денег на запланированное.\n"
+                "Приходится идти просто гулять.\n"
+                "Алла говорит, что ей всё равно нравится проводить с тобой время.",
+                {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Алла", 8);
+            state.getPlayer().getStats().romance += 5;
+        }
         ConsoleUI::WaitForEnter();
 
-        // После свидания
-        ConsoleUI::PrintHeader("ПОСЛЕ СВИДАНИЯ");
-        std::cout << "Алла берёт тебя за руку:\n";
-        std::cout << "«Спасибо за этот день. Ты особенный человек.»\n";
-        std::cout << "Ты чувствуешь, что между вами что-то большее...\n";
+        // Подарок
+        if (state.getPlayer().hasFlag("has_flowers")) {
+            ConsoleUI::RenderScreen("ЦВЕТЫ",
+                "Ты даришь Алле цветы, которые купил заранее.\n"
+                "Она ахает: «Ой, какие красивые! Ты запомнил,\n"
+                "что я люблю ромашки? Спасибо!»\n"
+                "Она обнимает тебя. Ты чувствуешь тепло.",
+                {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Алла", 15);
+            state.getPlayer().getStats().romance += 10;
+        }
+        ConsoleUI::WaitForEnter();
+
+        // Дождь
+        ConsoleUI::RenderScreen("ДОЖДЬ",
+            "Когда вы выходите, начинается дождь.\n"
+            "У тебя есть зонт.",
+            {"Предложить Алле укрыться под одним зонтом",
+             "Отдать зонт Алле, промокнуть самому",
+             "Сказать: «Романтика, правда?» и улыбнуться"},
+            state.getPlayer());
+
+        std::cin >> choice;
+        std::cin.ignore(10000, '\n');
+
+        switch (choice) {
+        case 1:
+            ConsoleUI::RenderScreen("ДОЖДЬ",
+                "Вы идёте под одним зонтом, прижавшись друг к другу.\n"
+                "Алла смеётся: «Уютно, хоть и мокро.»",
+                {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Алла", 8);
+            state.getPlayer().getStats().romance += 5;
+            break;
+        case 2:
+            ConsoleUI::RenderScreen("ДОЖДЬ",
+                "Алла укрывается зонтом, а ты мокнешь под дождём.\n"
+                "Она смотрит на тебя с нежностью: «Ты такой заботливый...»",
+                {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Алла", 12);
+            state.getPlayer().getStats().romance += 8;
+            state.getPlayer().getStats().health -= 5;
+            break;
+        case 3:
+            ConsoleUI::RenderScreen("ДОЖДЬ",
+                "Алла смеётся: «С тобой даже дождь — приключение!»\n"
+                "Вы оба промокаете, но настроение отличное.",
+                {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Алла", 10);
+            state.getPlayer().getStats().romance += 7;
+            state.getPlayer().getStats().stress -= 10;
+            break;
+        }
+        ConsoleUI::WaitForEnter();
+
+        // Итог свидания
+        ConsoleUI::RenderScreen("ИТОГ СВИДАНИЯ",
+            "Вы прощаетесь у её дома.\n"
+            "Алла смотрит тебе в глаза:\n"
+            "«Спасибо за этот день. Он был чудесным.»",
+            {}, state.getPlayer());
 
         if (state.getPlayer().getStats().romance >= 65 &&
             state.getPlayer().getRelation("Алла") >= 75) {
+            ConsoleUI::RenderScreen("МОМЕНТ",
+                "Она привстаёт на цыпочки и целует тебя в щёку.\n"
+                "А потом быстро забегает в подъезд, улыбаясь.\n"
+                "Ты стоишь под дождём и улыбаешься как дурак.\n"
+                "Это было прекрасно.",
+                {}, state.getPlayer());
             state.getPlayer().setFlag("romantic_ending", true);
-            std::cout << "\nВы целуетесь. Это магия.\n";
+        } else {
+            ConsoleUI::RenderScreen("ПРОЩАНИЕ",
+                "Вы тепло прощаетесь. Ты чувствуешь,\n"
+                "что между вами возникла особая связь.",
+                {}, state.getPlayer());
         }
-
-        ConsoleUI::WaitForEnter();
         state.getPlayer().setFlag("day7_done", true);
-    } else {
-        std::cout << "Увы, у тебя недостаточно высокие отношения с Аллой.\n";
-        std::cout << "Она не пришла на встречу. Возможно, в следующий раз...\n";
         ConsoleUI::WaitForEnter();
-    }
-
-    // Если Алла не пришла, можно заняться другими делами
-    if (!state.getPlayer().hasFlag("day7_done")) {
-        ConsoleUI::PrintHeader("ДЕНЬ БЕЗ СВИДАНИЯ");
-        std::cout << "Чем займёшься?\n";
-        std::cout << "1. Готовиться к последним экзаменам\n";
-        std::cout << "2. Пойти гулять с Булатом\n";
-        std::cout << "3. Просто отдыхать\n";
+    } else {
+        {
+            ConsoleUI::RenderScreen("ДЕНЬ БЕЗ СВИДАНИЯ",
+                "Сегодня никто не приглашает тебя на свидание.\n"
+                "Отношения с Аллой ещё недостаточно тёплые.\n"
+                "Может быть, в другой жизни...\n\n"
+                "Чем займёшься?",
+                {"Готовиться к последним экзаменам",
+                 "Пойти гулять с Булатом",
+                 "Просто отдыхать"},
+                state.getPlayer());
+        }
 
         int choice;
         std::cin >> choice;
@@ -678,6 +1227,7 @@ void Game::runDay7() {
 
         switch (choice) {
         case 1:
+            ConsoleUI::RenderScreen("ПОДГОТОВКА", "Ты зубришь комп. сети.", {}, state.getPlayer());
             state.getPlayer().getStats().intellect += 8;
             state.getPlayer().getStats().fatigue += 10;
             break;
@@ -685,12 +1235,15 @@ void Game::runDay7() {
             interactWithBulat();
             break;
         case 3:
+            ConsoleUI::RenderScreen("ОТДЫХ", "Ты отдыхаешь весь день.", {}, state.getPlayer());
             state.getPlayer().getStats().energy += 20;
             state.getPlayer().getStats().stress -= 10;
             break;
         }
+        ConsoleUI::WaitForEnter();
     }
 
+    day7_skip_date:
     eventManager.tryTriggerEvent(state.getPlayer(), 7);
 
     ConsoleUI::PrintHeader("КОНЕЦ ДНЯ 7");
@@ -698,66 +1251,90 @@ void Game::runDay7() {
     ConsoleUI::WaitForEnter();
 }
 
+// ==================== ДЕНЬ 8 — ИТОГИ ====================
+
 void Game::runDay8() {
     ConsoleUI::PrintDayHeader(8, "Последний экзамен и подведение итогов");
-    std::cout << "\nПоследний день сессии. Остался экзамен по комп. сетям.\n";
-    std::cout << "Сегодня решается всё.\n";
-    ConsoleUI::WaitForEnter();
 
     // Последний экзамен
-    ConsoleUI::PrintHeader("ПОСЛЕДНИЙ ЭКЗАМЕН");
+    ConsoleUI::PrintHeader("ПОСЛЕДНИЙ ЭКЗАМЕН — КОМПЬЮТЕРНЫЕ СЕТИ");
     NetworksExam networksExam;
     networksExam.runExam(state.getPlayer());
-
     ConsoleUI::WaitForEnter();
 
     // Подведение итогов
     ConsoleUI::PrintHeader("ПОДВЕДЕНИЕ ИТОГОВ");
 
     const auto& stats = state.getPlayer().getStats();
-    std::cout << "Сессия позади. Давай посмотрим, как всё прошло.\n\n";
+    std::cout << BOX_TL << std::string(78, BOX_H[0]) << BOX_TR "\n";
+    std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  Сессия позади. Давай посмотрим, как всё прошло." << std::string(20, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
 
     int totalScore = 0;
+    const char* examNames[] = {"История", "ЯиМП", "Дискретка", "Матанализ", "Комп.сети"};
     for (int i = 1; i <= 5; i++) {
         int g = state.getPlayer().getGrade(i);
         if (g > 0) {
-            std::cout << "Экзамен " << i << ": " << g << " баллов\n";
+            std::string line = "  " + std::string(examNames[i-1]) + ": " + std::to_string(g) + " баллов";
+            std::cout << BOX_V " " << line << std::string(78 - 3 - static_cast<int>(line.size()), ' ') << BOX_V "\n";
             totalScore += g;
         } else {
-            std::cout << "Экзамен " << i << ": не сдан\n";
+            std::string line = "  " + std::string(examNames[i-1]) + ": не сдан";
+            std::cout << BOX_V " " << line << std::string(78 - 3 - static_cast<int>(line.size()), ' ') << BOX_V "\n";
         }
     }
 
-    std::cout << "\nИтоговые характеристики:\n";
-    std::cout << "Интеллект: " << stats.intellect << "\n";
-    std::cout << "Человечность: " << stats.humanity << "\n";
-    std::cout << "Романтика: " << stats.romance << "\n";
-    std::cout << "Отношения с Аллой: " << state.getPlayer().getRelation("Алла") << "\n";
-    std::cout << "Долгов: " << state.getPlayer().getDebts() << "\n";
-
+    std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
+    std::string line = "  Итоговые характеристики:";
+    std::cout << BOX_V " " << line << std::string(78 - 3 - static_cast<int>(line.size()), ' ') << BOX_V "\n";
+    auto printStat = [&](const std::string& name, int val) {
+        std::string l = "    " + name + ": " + std::to_string(val);
+        std::cout << BOX_V " " << l << std::string(78 - 3 - static_cast<int>(l.size()), ' ') << BOX_V "\n";
+    };
+    printStat("Интеллект", stats.intellect);
+    printStat("Человечность", stats.humanity);
+    printStat("Романтика", stats.romance);
+    printStat("Отношения с Аллой", state.getPlayer().getRelation("Алла"));
+    printStat("Долгов", state.getPlayer().getDebts());
+    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
     ConsoleUI::WaitForEnter();
 
     // Финальный выбор
-    ConsoleUI::PrintHeader("ФИНАЛЬНЫЙ ВЫБОР");
-    std::cout << "Что ты чувствуешь после сессии?\n";
-    std::cout << "1. Гордость — ты справился со всем!\n";
-    std::cout << "2. Облегчение — наконец-то всё кончилось.\n";
-    std::cout << "3. Усталость — ты выжат как лимон.\n";
-    std::cout << "4. Пустоту — что дальше?\n";
+    std::cout << BOX_TL << std::string(78, BOX_H[0]) << BOX_TR "\n";
+    std::cout << BOX_V " ФИНАЛЬНЫЙ ВЫБОР" << std::string(63, ' ') << BOX_V "\n";
+    std::cout << BOX_L << std::string(78, BOX_H[0]) << BOX_R "\n";
+    std::cout << BOX_V "  Что ты чувствуешь после сессии?" << std::string(46, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  1. Гордость — ты справился со всем!" << std::string(36, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  2. Облегчение — наконец-то всё кончилось." << std::string(31, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  3. Усталость — ты выжат как лимон." << std::string(37, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  4. Пустоту — что дальше?" << std::string(44, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
+    std::cout << BOX_V "  Ваш выбор [0-4]: ";
+    std::cout << std::string(40, ' ') << BOX_V "\n";
+    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
 
+    // Курсор уже в нужном месте после "Ваш выбор"
+    std::cout << "\r                                                                                \r";
+    std::cout << "  Ваш выбор: ";
     int finalChoice;
     std::cin >> finalChoice;
     std::cin.ignore(10000, '\n');
 
     if (finalChoice == 4 && state.getPlayer().getDebts() >= 3) {
-        std::cout << "\nВозможно, тебе стоит взять паузу и подумать...\n";
+        ConsoleUI::RenderScreen("ПУТЬ",
+            "Возможно, тебе стоит взять паузу и подумать...\n"
+            "Армия — тоже вариант.",
+            {}, state.getPlayer());
         state.getPlayer().setFlag("army_path", true);
+        ConsoleUI::WaitForEnter();
     }
 
     eventManager.tryTriggerEvent(state.getPlayer(), 8);
 
     // Переход к концовке
-    state.getPlayer().nextDay(); // день 9 — вызовет оценку концовки
+    state.getPlayer().nextDay();
 }
 
 // ==================== ЛОКАЦИИ ====================
@@ -775,47 +1352,47 @@ void Game::handleLocation(LocationID loc) {
 
 void Game::handleHomeLocation() {
     ConsoleUI::PrintHeader("ДОМ");
-    std::cout << "Ты дома. Можно отдохнуть.\n";
-    std::cout << "1. Лечь спать\n";
-    std::cout << "2. Поесть\n";
-    std::cout << "3. Позаниматься\n";
+    ConsoleUI::ShowLocationArt(LocationID::Home);
+    ConsoleUI::RenderScreen("ДОМ", "Ты дома. Можно отдохнуть.",
+        {"Лечь спать", "Поесть", "Позаниматься"},
+        state.getPlayer());
 
     int choice;
     std::cin >> choice;
     std::cin.ignore(10000, '\n');
 
+    auto& s = state.getPlayer().getStats();
     switch (choice) {
     case 1:
-        std::cout << "\nТы хорошо выспался.\n";
-        state.getPlayer().getStats().energy += GameConstants::SLEEP_ENERGY_GAIN;
-        state.getPlayer().getStats().fatigue -= GameConstants::SLEEP_FATIGUE_REDUCE;
-        state.getPlayer().getStats().stress -= GameConstants::SLEEP_STRESS_REDUCE;
-        state.getPlayer().getStats().hunger += GameConstants::SLEEP_HUNGER_INCREASE;
+        s.energy += GameConstants::SLEEP_ENERGY_GAIN;
+        s.fatigue -= GameConstants::SLEEP_FATIGUE_REDUCE;
+        s.stress -= GameConstants::SLEEP_STRESS_REDUCE;
+        s.hunger += GameConstants::SLEEP_HUNGER_INCREASE;
         state.getPlayer().advanceTime(480);
+        ConsoleUI::RenderScreen("СОН", "Ты хорошо выспался.", {}, state.getPlayer());
         break;
     case 2:
         HungerSystem::Eat(state.getPlayer(), GameConstants::EAT_MONEY_COST);
-        std::cout << "Ты поел.\n";
+        ConsoleUI::RenderScreen("ЕДА", "Ты поел.", {}, state.getPlayer());
         break;
     case 3:
-        std::cout << "\nТы занимаешься.\n";
-        state.getPlayer().getStats().intellect += GameConstants::STUDY_INTELLECT_GAIN;
-        state.getPlayer().getStats().fatigue += GameConstants::STUDY_FATIGUE_COST;
-        state.getPlayer().getStats().energy -= GameConstants::STUDY_ENERGY_COST;
+        s.intellect += GameConstants::STUDY_INTELLECT_GAIN;
+        s.fatigue += GameConstants::STUDY_FATIGUE_COST;
+        s.energy -= GameConstants::STUDY_ENERGY_COST;
         state.getPlayer().advanceTime(120);
+        ConsoleUI::RenderScreen("ЗАНЯТИЯ", "Ты позанимался.", {}, state.getPlayer());
         break;
     }
-    state.getPlayer().getStats().clampAll();
+    s.clampAll();
+    ConsoleUI::WaitForEnter();
 }
 
 void Game::handleUniversityLocation() {
     ConsoleUI::PrintHeader("УНИВЕРСИТЕТ");
-    std::cout << "Ты в университете. Кого встретишь?\n";
-    std::cout << "1. Аллу\n";
-    std::cout << "2. Булата\n";
-    std::cout << "3. Семёна\n";
-    std::cout << "4. Артёма\n";
-    std::cout << "5. Пойти в библиотеку\n";
+    ConsoleUI::ShowLocationArt(LocationID::University);
+    ConsoleUI::RenderScreen("УНИВЕРСИТЕТ", "Кого хочешь встретить?",
+        {"Аллу", "Булата", "Семёна", "Артёма", "Пойти в библиотеку"},
+        state.getPlayer());
 
     int choice;
     std::cin >> choice;
@@ -827,9 +1404,10 @@ void Game::handleUniversityLocation() {
     case 3: interactWithSemen(); break;
     case 4: interactWithArtem(); break;
     case 5:
-        std::cout << "\nТы занимаешься в библиотеке.\n";
+        ConsoleUI::RenderScreen("БИБЛИОТЕКА", "Ты занимаешься в библиотеке.", {}, state.getPlayer());
         state.getPlayer().getStats().intellect += 5;
         state.getPlayer().advanceTime(120);
+        ConsoleUI::WaitForEnter();
         break;
     }
     state.getPlayer().advanceTime(30);
@@ -837,12 +1415,10 @@ void Game::handleUniversityLocation() {
 
 void Game::handleStreetLocation() {
     ConsoleUI::PrintHeader("УЛИЦА");
-    std::cout << "Ты на улице. Куда пойти?\n";
-    std::cout << "1. В университет\n";
-    std::cout << "2. В столовую\n";
-    std::cout << "3. В магазин\n";
-    std::cout << "4. В цветочный магазин\n";
-    std::cout << "5. Просто гулять\n";
+    ConsoleUI::ShowLocationArt(LocationID::Street);
+    ConsoleUI::RenderScreen("УЛИЦА", "Куда пойти?",
+        {"В университет", "В столовую", "В магазин", "В цветочный магазин", "Просто гулять"},
+        state.getPlayer());
 
     int choice;
     std::cin >> choice;
@@ -854,107 +1430,114 @@ void Game::handleStreetLocation() {
     case 3: state.getPlayer().setLocation(LocationID::Shop); break;
     case 4: state.getPlayer().setLocation(LocationID::FlowerShop); break;
     case 5:
-        std::cout << "\nТы гуляешь. Встречаешь знакомых.\n";
+        ConsoleUI::RenderScreen("ПРОГУЛКА", "Ты гуляешь. Встречаешь знакомых.", {}, state.getPlayer());
         state.getPlayer().getStats().stress -= 5;
         state.getPlayer().advanceTime(30);
+        ConsoleUI::WaitForEnter();
         break;
     }
 }
 
 void Game::handleCanteenLocation() {
     ConsoleUI::PrintHeader("СТОЛОВАЯ");
-    std::cout << "Ты в столовой. Что будешь заказывать?\n";
-    std::cout << "1. Комплексный обед (150 руб.)\n";
-    std::cout << "2. Чай с булочкой (50 руб.)\n";
-    std::cout << "3. Ничего, просто посидеть\n";
+    ConsoleUI::ShowLocationArt(LocationID::Canteen);
+    ConsoleUI::RenderScreen("СТОЛОВАЯ", "Что будешь заказывать?",
+        {"Комплексный обед (150 руб)", "Чай с булочкой (50 руб)", "Ничего, просто посидеть"},
+        state.getPlayer());
 
     int choice;
     std::cin >> choice;
     std::cin.ignore(10000, '\n');
 
+    auto& s = state.getPlayer().getStats();
     switch (choice) {
     case 1:
-        if (state.getPlayer().getStats().money >= 150) {
-            state.getPlayer().getStats().money -= 150;
-            state.getPlayer().getStats().hunger = std::max(0, state.getPlayer().getStats().hunger - 50);
-            state.getPlayer().getStats().energy += 15;
-            std::cout << "\nВкусный обед!\n";
+        if (s.money >= 150) {
+            s.money -= 150;
+            s.hunger = std::max(0, s.hunger - 50);
+            s.energy += 15;
+            ConsoleUI::RenderScreen("ОБЕД", "Вкусный обед!", {}, state.getPlayer());
         } else {
-            std::cout << "\nНе хватает денег.\n";
+            ConsoleUI::RenderScreen("ОБЕД", "Не хватает денег.", {}, state.getPlayer());
         }
         break;
     case 2:
-        if (state.getPlayer().getStats().money >= 50) {
-            state.getPlayer().getStats().money -= 50;
-            state.getPlayer().getStats().hunger = std::max(0, state.getPlayer().getStats().hunger - 20);
-            state.getPlayer().getStats().energy += 5;
-            std::cout << "\nЧай с булочкой — отличный перекус.\n";
+        if (s.money >= 50) {
+            s.money -= 50;
+            s.hunger = std::max(0, s.hunger - 20);
+            s.energy += 5;
+            ConsoleUI::RenderScreen("ПЕРЕКУС", "Чай с булочкой — отлично.", {}, state.getPlayer());
         } else {
-            std::cout << "\nНе хватает денег.\n";
+            ConsoleUI::RenderScreen("ПЕРЕКУС", "Не хватает денег.", {}, state.getPlayer());
         }
         break;
     case 3:
-        std::cout << "\nТы просто сидишь и отдыхаешь.\n";
-        state.getPlayer().getStats().stress -= 3;
+        ConsoleUI::RenderScreen("ОТДЫХ", "Ты просто отдыхаешь.", {}, state.getPlayer());
+        s.stress -= 3;
         break;
     }
     state.getPlayer().advanceTime(30);
-    state.getPlayer().getStats().clampAll();
+    s.clampAll();
+    ConsoleUI::WaitForEnter();
 }
 
 void Game::handleShopLocation() {
     ConsoleUI::PrintHeader("МАГАЗИН");
-    std::cout << "Ты в магазине. Что купить?\n";
-    std::cout << "1. Продукты (200 руб.)\n";
-    std::cout << "2. Канцтовары (100 руб.)\n";
-    std::cout << "3. Книгу по программированию (300 руб.)\n";
-    std::cout << "0. Выйти\n";
+    ConsoleUI::ShowLocationArt(LocationID::Shop);
+    ConsoleUI::RenderScreen("МАГАЗИН", "Что купить?",
+        {"Продукты (200 руб)", "Канцтовары (100 руб)", "Книгу по C++ (300 руб)", "Выйти"},
+        state.getPlayer());
 
     int choice;
     std::cin >> choice;
     std::cin.ignore(10000, '\n');
 
+    auto& s = state.getPlayer().getStats();
     switch (choice) {
     case 1:
-        if (state.getPlayer().getStats().money >= 200) {
-            state.getPlayer().getStats().money -= 200;
-            state.getPlayer().getStats().hunger = std::max(0, state.getPlayer().getStats().hunger - 30);
-            std::cout << "\nКупил продукты.\n";
+        if (s.money >= 200) {
+            s.money -= 200;
+            s.hunger = std::max(0, s.hunger - 30);
+            ConsoleUI::RenderScreen("ПОКУПКА", "Купил продукты.", {}, state.getPlayer());
         } else {
-            std::cout << "\nНе хватает денег.\n";
+            ConsoleUI::RenderScreen("ПОКУПКА", "Не хватает денег.", {}, state.getPlayer());
         }
         break;
     case 2:
-        if (state.getPlayer().getStats().money >= 100) {
-            state.getPlayer().getStats().money -= 100;
-            state.getPlayer().getStats().intellect += 2;
-            std::cout << "\nКупил канцтовары.\n";
+        if (s.money >= 100) {
+            s.money -= 100;
+            s.intellect += 2;
+            ConsoleUI::RenderScreen("ПОКУПКА", "Купил канцтовары.", {}, state.getPlayer());
         } else {
-            std::cout << "\nНе хватает денег.\n";
+            ConsoleUI::RenderScreen("ПОКУПКА", "Не хватает денег.", {}, state.getPlayer());
         }
         break;
     case 3:
-        if (state.getPlayer().getStats().money >= 300) {
-            state.getPlayer().getStats().money -= 300;
-            state.getPlayer().getStats().intellect += 8;
-            std::cout << "\nКупил книгу по программированию.\n";
+        if (s.money >= 300) {
+            s.money -= 300;
+            s.intellect += 8;
+            ConsoleUI::RenderScreen("ПОКУПКА", "Купил книгу по C++. Теперь ты гуру!", {}, state.getPlayer());
         } else {
-            std::cout << "\nНе хватает денег.\n";
+            ConsoleUI::RenderScreen("ПОКУПКА", "Не хватает денег.", {}, state.getPlayer());
         }
         break;
     }
     state.getPlayer().advanceTime(20);
-    state.getPlayer().getStats().clampAll();
+    s.clampAll();
+    ConsoleUI::WaitForEnter();
 }
 
 void Game::handleFlowerShopLocation() {
     ConsoleUI::PrintHeader("ЦВЕТОЧНЫЙ МАГАЗИН");
-    std::cout << "В цветочном магазине красивый аромат.\n";
-    std::cout << "Продавщица: «Что желаете?»\n";
+    ConsoleUI::ShowLocationArt(LocationID::FlowerShop);
 
     if (state.getPlayer().getStats().money >= GameConstants::FLOWER_COST) {
-        std::cout << "1. Купить букет цветов (300 руб.)\n";
-        std::cout << "0. Выйти\n";
+        ConsoleUI::RenderScreen("ЦВЕТЫ",
+            "В цветочном магазине прекрасный аромат.\n"
+            "Продавщица: «Что желаете?»\n"
+            "Букет роз стоит 300 руб.",
+            {"Купить букет цветов (300 руб)", "Выйти"},
+            state.getPlayer());
 
         int choice;
         std::cin >> choice;
@@ -963,11 +1546,11 @@ void Game::handleFlowerShopLocation() {
         if (choice == 1) {
             state.getPlayer().getStats().money -= GameConstants::FLOWER_COST;
             state.getPlayer().setFlag("has_flowers", true);
-            std::cout << "\nТы купил прекрасный букет!\n";
-            std::cout << "Интересно, кому его подарить?\n";
-
-            std::cout << "1. Подарить Алле\n";
-            std::cout << "2. Оставить себе\n";
+            ConsoleUI::RenderScreen("ЦВЕТЫ",
+                "Ты купил прекрасный букет!\n"
+                "Кому подарить?",
+                {"Подарить Алле", "Оставить себе"},
+                state.getPlayer());
 
             int subChoice;
             std::cin >> subChoice;
@@ -976,14 +1559,15 @@ void Game::handleFlowerShopLocation() {
             if (subChoice == 1) {
                 state.getPlayer().modifyRelation("Алла", 15);
                 state.getPlayer().getStats().romance += 10;
-                std::cout << "\nАлла в восторге от цветов!\n";
                 state.getPlayer().setFlag("gave_flowers_to_alla", true);
+                ConsoleUI::RenderScreen("ЦВЕТЫ", "Алла в восторге!", {}, state.getPlayer());
             } else {
-                std::cout << "\nЦветы будут стоять у тебя дома.\n";
+                ConsoleUI::RenderScreen("ЦВЕТЫ", "Цветы будут стоять у тебя дома.", {}, state.getPlayer());
             }
+            ConsoleUI::WaitForEnter();
         }
     } else {
-        std::cout << "У тебя недостаточно денег для покупки цветов.\n";
+        ConsoleUI::RenderScreen("ЦВЕТЫ", "У тебя не хватает денег на цветы.", {}, state.getPlayer());
         ConsoleUI::WaitForEnter();
     }
     state.getPlayer().advanceTime(15);
@@ -993,13 +1577,17 @@ void Game::handleFlowerShopLocation() {
 
 void Game::interactWithAlla() {
     ConsoleUI::PrintHeader("ОБЩЕНИЕ С АЛЛОЙ");
-    std::cout << alla->getDialog(state.getPlayer()) << "\n\n";
+    ConsoleUI::ShowNPCPortrait("Алла");
+    std::cout << BOX_V " " << alla->getDialog(state.getPlayer()) << "\n";
+    ConsoleUI::PrintSeparator();
 
     auto choices = alla->getChoices(state.getPlayer());
     for (size_t i = 0; i < choices.size(); i++) {
-        std::cout << (i + 1) << ". " << choices[i].text << "\n";
+        std::cout << BOX_V " " << (i + 1) << ". " << choices[i].text << "\n";
     }
-    std::cout << "0. Закончить разговор\n";
+    std::cout << BOX_V " 0. Закончить разговор\n";
+    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << BOX_V " Ваш выбор: ";
 
     int choice;
     std::cin >> choice;
@@ -1010,11 +1598,10 @@ void Game::interactWithAlla() {
         RelationshipSystem::ApplyChoiceEffect(state.getPlayer(), "Алла", selected.effects);
         std::cout << "\n" << selected.resultingText << "\n";
 
-        // Событие для романтической ветки
         if (selected.text.find("Пригласить на свидание") != std::string::npos) {
             ConsoleUI::WaitForEnter();
             ConsoleUI::PrintHeader("СВИДАНИЕ");
-            std::cout << "Алла соглашается! Вы договариваетесь о встрече.\n";
+            std::cout << BOX_V " Алла соглашается! Вы договариваетесь о встрече.\n";
             state.getPlayer().setFlag("day7_available", true);
         }
     }
@@ -1025,13 +1612,17 @@ void Game::interactWithAlla() {
 
 void Game::interactWithBulat() {
     ConsoleUI::PrintHeader("ОБЩЕНИЕ С БУЛАТОМ");
-    std::cout << bulat->getDialog(state.getPlayer()) << "\n\n";
+    ConsoleUI::ShowNPCPortrait("Булат");
+    std::cout << BOX_V " " << bulat->getDialog(state.getPlayer()) << "\n";
+    ConsoleUI::PrintSeparator();
 
     auto choices = bulat->getChoices(state.getPlayer());
     for (size_t i = 0; i < choices.size(); i++) {
-        std::cout << (i + 1) << ". " << choices[i].text << "\n";
+        std::cout << BOX_V " " << (i + 1) << ". " << choices[i].text << "\n";
     }
-    std::cout << "0. Закончить разговор\n";
+    std::cout << BOX_V " 0. Закончить разговор\n";
+    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << BOX_V " Ваш выбор: ";
 
     int choice;
     std::cin >> choice;
@@ -1049,13 +1640,17 @@ void Game::interactWithBulat() {
 
 void Game::interactWithSemen() {
     ConsoleUI::PrintHeader("ОБЩЕНИЕ С СЕМЁНОМ");
-    std::cout << semen->getDialog(state.getPlayer()) << "\n\n";
+    ConsoleUI::ShowNPCPortrait("Семён");
+    std::cout << BOX_V " " << semen->getDialog(state.getPlayer()) << "\n";
+    ConsoleUI::PrintSeparator();
 
     auto choices = semen->getChoices(state.getPlayer());
     for (size_t i = 0; i < choices.size(); i++) {
-        std::cout << (i + 1) << ". " << choices[i].text << "\n";
+        std::cout << BOX_V " " << (i + 1) << ". " << choices[i].text << "\n";
     }
-    std::cout << "0. Закончить разговор\n";
+    std::cout << BOX_V " 0. Закончить разговор\n";
+    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << BOX_V " Ваш выбор: ";
 
     int choice;
     std::cin >> choice;
@@ -1073,13 +1668,17 @@ void Game::interactWithSemen() {
 
 void Game::interactWithArtem() {
     ConsoleUI::PrintHeader("ОБЩЕНИЕ С АРТЁМОМ");
-    std::cout << artem->getDialog(state.getPlayer()) << "\n\n";
+    ConsoleUI::ShowNPCPortrait("Артём");
+    std::cout << BOX_V " " << artem->getDialog(state.getPlayer()) << "\n";
+    ConsoleUI::PrintSeparator();
 
     auto choices = artem->getChoices(state.getPlayer());
     for (size_t i = 0; i < choices.size(); i++) {
-        std::cout << (i + 1) << ". " << choices[i].text << "\n";
+        std::cout << BOX_V " " << (i + 1) << ". " << choices[i].text << "\n";
     }
-    std::cout << "0. Закончить разговор\n";
+    std::cout << BOX_V " 0. Закончить разговор\n";
+    std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+    std::cout << BOX_V " Ваш выбор: ";
 
     int choice;
     std::cin >> choice;

@@ -6,8 +6,8 @@ Player::Player(const std::string& playerName)
     : name(playerName) {
     npcRelationships["Алла"] = GameConstants::START_RELATIONSHIP;
     npcRelationships["Булат"] = GameConstants::START_RELATIONSHIP;
-    npcRelationships["Семен"] = GameConstants::START_RELATIONSHIP;
-    npcRelationships["Артем"] = GameConstants::START_RELATIONSHIP;
+    npcRelationships["Семён"] = GameConstants::START_RELATIONSHIP;
+    npcRelationships["Артём"] = GameConstants::START_RELATIONSHIP;
     npcRelationships["Преподаватели"] = GameConstants::START_RELATIONSHIP;
 }
 
@@ -160,6 +160,12 @@ std::string Player::serialize() const {
         oss << npc << " " << rel << "\n";
     }
 
+    // Сохраняем активные баффы
+    oss << activeBuffs.size() << "\n";
+    for (auto b : activeBuffs) {
+        oss << static_cast<int>(b) << "\n";
+    }
+
     return oss.str();
 }
 
@@ -202,6 +208,16 @@ bool Player::deserialize(const std::string& data) {
         int rel;
         if (!(iss >> npc >> rel)) return false;
         npcRelationships[npc] = rel;
+    }
+
+    // Загружаем активные баффы
+    activeBuffs.clear();
+    size_t buffCount;
+    if (!(iss >> buffCount)) return false;
+    for (size_t i = 0; i < buffCount; i++) {
+        int b;
+        if (!(iss >> b)) return false;
+        activeBuffs.push_back(static_cast<BuffType>(b));
     }
 
     return true;

@@ -14,10 +14,12 @@ $sourceFiles = @(
     "core\Game.cpp", "core\GameState.cpp",
     "player\Player.cpp",
     "npc\NPC.cpp",
+    "data\AsciiArt.cpp", "data\Lang.cpp",
     "exams\Exam.cpp",
     "events\RandomEvent.cpp",
     "systems\RelationshipSystem.cpp", "systems\FatigueSystem.cpp",
     "systems\HungerSystem.cpp", "systems\ReputationSystem.cpp", "systems\EndingSystem.cpp",
+    "systems\DebuffSystem.cpp",
     "ui\ConsoleUI.cpp", "ui\Menu.cpp",
     "save\SaveManager.cpp"
 )

@@ -10,6 +10,7 @@ private:
     GameOverCondition gameOverReason = GameOverCondition::None;
     int currentDay = 1;
     bool gameStarted = false;
+    std::string npcMemoryData; // serialized NPC memory for save/load
 
 public:
     GameState() = default;
@@ -25,6 +26,8 @@ public:
     void setCurrentDay(int day) { currentDay = day; }
     bool isGameStarted() const { return gameStarted; }
     void setGameStarted(bool started) { gameStarted = started; }
+    const std::string& getNPCMemoryData() const { return npcMemoryData; }
+    void setNPCMemoryData(const std::string& data) { npcMemoryData = data; }
 
     // Сериализация
     std::string serialize() const;

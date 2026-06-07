@@ -7,4 +7,5 @@ public:
     static void ShowGameOverMenu(const std::string& endingText);
     static void ShowControls();
     static int MainMenuChoice();
+    static void ShowSettings();
 };
