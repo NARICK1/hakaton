@@ -4,13 +4,65 @@
 #include <iostream>
 #include <random>
 #include <cctype>
+#include <sstream>
+
+namespace {
+    std::string normalizeAnswer(const std::string& text) {
+        std::string result;
+        bool lastWasSpace = false;
+
+        for (unsigned char ch : text) {
+            if (std::isspace(ch)) {
+                if (!lastWasSpace && !result.empty()) {
+                    result += ' ';
+                    lastWasSpace = true;
+                }
+            } else {
+                result += static_cast<char>(std::tolower(ch));
+                lastWasSpace = false;
+            }
+        }
+
+        while (!result.empty() && result.back() == ' ') {
+            result.pop_back();
+        }
+
+        return result;
+    }
+
+    bool isTextAnswerCorrect(const std::string& playerAnswer, const std::string& correctAnswer) {
+        std::string normalizedPlayer = normalizeAnswer(playerAnswer);
+
+        if (normalizedPlayer.empty()) {
+            return false;
+        }
+
+        // Можно задавать несколько правильных вариантов через символ |
+        // Например: "vector|std::vector|вектор"
+        std::stringstream ss(correctAnswer);
+        std::string variant;
+
+        while (std::getline(ss, variant, '|')) {
+            std::string normalizedVariant = normalizeAnswer(variant);
+
+            if (normalizedPlayer == normalizedVariant) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
 
 int Exam::evaluateAnswers(const std::vector<int>& answers) const {
     if (answers.empty() || questions.empty()) return 0;
+
     int correct = 0;
+
     for (size_t i = 0; i < std::min(answers.size(), questions.size()); i++) {
         if (answers[i] == 1) correct++;
     }
+
     return (correct * 100) / static_cast<int>(questions.size());
 }
 
@@ -24,9 +76,15 @@ int Exam::askQuestionsConsole(Player& player) const {
     int correctCount = 0;
     int totalQuestions = static_cast<int>(questions.size());
 
+    if (totalQuestions <= 0) {
+        return 0;
+    }
+
     for (int i = 0; i < totalQuestions; i++) {
         const auto& q = questions[i];
+
         ConsoleUI::PrintSeparator();
+
         std::cout << "Вопрос " << (i + 1) << "/" << totalQuestions << ":\n";
         std::cout << q.question << "\n\n";
 
@@ -34,6 +92,7 @@ int Exam::askQuestionsConsole(Player& player) const {
             for (size_t j = 0; j < q.options.size(); j++) {
                 std::cout << (j + 1) << ". " << q.options[j] << "\n";
             }
+
             std::cout << "\nВведите номер ответа: ";
 
             int choice;
@@ -47,38 +106,74 @@ int Exam::askQuestionsConsole(Player& player) const {
                 } else {
                     std::cout << "✗ Неправильно. Правильный ответ: " << q.correctAnswer << "\n";
                 }
+            } else {
+                std::cout << "✗ Такого варианта нет.\n";
             }
         } else {
             std::cout << "Введите ваш ответ: ";
+
             std::string answer;
             std::getline(std::cin, answer);
 
-            // Приводим к нижнему регистру для сравнения
-            std::string lowerAnswer = answer;
-            std::string lowerCorrect = q.correctAnswer;
-            std::transform(lowerAnswer.begin(), lowerAnswer.end(), lowerAnswer.begin(), ::tolower);
-            std::transform(lowerCorrect.begin(), lowerCorrect.end(), lowerCorrect.begin(), ::tolower);
-
-            if (lowerAnswer.find(lowerCorrect) != std::string::npos ||
-                lowerCorrect.find(lowerAnswer) != std::string::npos) {
-                // Проверяем на непустой ответ
-                if (!answer.empty()) {
-                    std::cout << "✓ Принято!\n";
-                    correctCount++;
-                } else {
-                    std::cout << "✗ Ответ не распознан.\n";
-                }
+            if (isTextAnswerCorrect(answer, q.correctAnswer)) {
+                std::cout << "✓ Правильно!\n";
+                correctCount++;
             } else {
-                std::cout << "✗ Ожидался ответ: " << q.correctAnswer << "\n";
+                std::cout << "✗ Неправильно. Правильный ответ: " << q.correctAnswer << "\n";
             }
         }
     }
 
     ConsoleUI::PrintSeparator();
-    std::cout << "Результат: " << correctCount << " из " << totalQuestions << " правильных.\n";
 
-    int bonus = player.getStats().intellect / 10;
-    return std::min(100, (correctCount * 100 / totalQuestions) + bonus);
+    int baseScore = (correctCount * 100) / totalQuestions;
+
+    int effectiveIntellect = player.getStats().intellect;
+
+    if (player.hasBuff(BuffType::ImposterSyndrome)) {
+        effectiveIntellect = effectiveIntellect * 80 / 100;
+    }
+
+    int intellectBonus = 0;
+
+    if (effectiveIntellect >= 90) {
+        intellectBonus = 25;
+    } else if (effectiveIntellect >= 75) {
+        intellectBonus = 20;
+    } else if (effectiveIntellect >= 60) {
+        intellectBonus = 12;
+    } else if (effectiveIntellect >= 45) {
+        intellectBonus = 5;
+    } else if (effectiveIntellect >= 30) {
+        intellectBonus = 0;
+    } else {
+        intellectBonus = -10;
+    }
+
+    int difficultyModifier = (50 - difficulty) / 2;
+
+    int score = std::clamp(
+        baseScore + intellectBonus + difficultyModifier,
+        0,
+        100
+    );
+
+    std::cout << "Результат: " << correctCount << " из " << totalQuestions << " правильных.\n";
+    std::cout << "Базовый балл за ответы: " << baseScore << "\n";
+
+    if (player.hasBuff(BuffType::ImposterSyndrome)) {
+        std::cout << "Синдром самозванца мешает сосредоточиться: эффективный интеллект снижен.\n";
+    }
+
+    std::cout << "Бонус интеллекта: "
+              << (intellectBonus >= 0 ? "+" : "") << intellectBonus << "\n";
+
+    std::cout << "Модификатор сложности экзамена: "
+              << (difficultyModifier >= 0 ? "+" : "") << difficultyModifier << "\n";
+
+    std::cout << "Итог до реакции преподавателя: " << score << "\n";
+
+    return score;
 }
 
 std::string Exam::getTeacherReaction(int score) const {
@@ -100,16 +195,41 @@ HistoryExam::HistoryExam() {
 
 void HistoryExam::generateQuestions() {
     questions.clear();
-    questions.push_back({ "В каком году была Куликовская битва?",
-        "1380", {"1242", "1380", "1480", "1612"}, true });
-    questions.push_back({ "Кто был первым президентом России?",
-        "Борис Ельцин", {"Михаил Горбачёв", "Борис Ельцин", "Владимир Путин", "Дмитрий Медведев"}, true });
-    questions.push_back({ "Какое событие произошло в 1917 году?",
-        "Октябрьская революция", {"Первая мировая война", "Октябрьская революция", "Отмена крепостного права", "Война 1812 года"}, true });
-    questions.push_back({ "Кто написал 'Слово о полку Игореве'?",
-        "Неизвестный автор", {"Пушкин", "Лермонтов", "Неизвестный автор", "Толстой"}, true });
-    questions.push_back({ "В каком году была основана Москва?",
-        "1147", {"1147", "1237", "1328", "1480"}, true });
+
+    questions.push_back({
+        "В каком году была Куликовская битва?",
+        "1380",
+        {"1242", "1380", "1480", "1612"},
+        true
+    });
+
+    questions.push_back({
+        "Кто был первым президентом России?",
+        "Борис Ельцин",
+        {"Михаил Горбачёв", "Борис Ельцин", "Владимир Путин", "Дмитрий Медведев"},
+        true
+    });
+
+    questions.push_back({
+        "Какое событие произошло в 1917 году?",
+        "Октябрьская революция",
+        {"Первая мировая война", "Октябрьская революция", "Отмена крепостного права", "Война 1812 года"},
+        true
+    });
+
+    questions.push_back({
+        "Кто написал 'Слово о полку Игореве'?",
+        "Неизвестный автор",
+        {"Пушкин", "Лермонтов", "Неизвестный автор", "Толстой"},
+        true
+    });
+
+    questions.push_back({
+        "В каком году была основана Москва?",
+        "1147",
+        {"1147", "1237", "1328", "1480"},
+        true
+    });
 }
 
 int HistoryExam::runExam(Player& player) {
@@ -126,8 +246,8 @@ int HistoryExam::runExam(Player& player) {
     std::cin >> ticketChoice;
     std::cin.ignore(10000, '\n');
 
-    std::mt19937 rng(std::random_device{}());
     int luckBonus = 0;
+
     if (ticketChoice == 2) {
         luckBonus = 10;
         std::cout << "\nСредний билет оказался удачным!\n";
@@ -162,19 +282,43 @@ YAMPExam::YAMPExam() {
 
 void YAMPExam::generateQuestions() {
     questions.clear();
-    questions.push_back({ "Что такое указатель в C++?",
-        "Переменная для хранения адреса памяти", {"Тип данных", "Переменная для хранения адреса памяти", "Функция", "Класс"}, true });
-    questions.push_back({ "Какой оператор используется для выделения памяти в C++?",
-        "new", {"malloc", "new", "alloc", "create"}, true });
-    questions.push_back({ "Что такое виртуальная функция?",
+
+    questions.push_back({
+        "Что такое указатель в C++?",
+        "Переменная для хранения адреса памяти",
+        {"Тип данных", "Переменная для хранения адреса памяти", "Функция", "Класс"},
+        true
+    });
+
+    questions.push_back({
+        "Какой оператор используется для выделения памяти в C++?",
+        "new",
+        {"malloc", "new", "alloc", "create"},
+        true
+    });
+
+    questions.push_back({
+        "Что такое виртуальная функция?",
         "Функция, которая может быть переопределена в наследнике",
         {"Статическая функция", "Функция, которая может быть переопределена в наследнике",
-         "Дружественная функция", "Встроенная функция"}, true });
-    questions.push_back({ "Какой контейнер реализует динамический массив в STL?",
-        "vector", {"list", "vector", "map", "set"}, true });
-    questions.push_back({ "Что делает delete[]?",
-        "Освобождает массив в памяти", {"Освобождает одну переменную", "Освобождает массив в памяти",
-         "Удаляет файл", "Вызывает деструктор"}, true });
+         "Дружественная функция", "Встроенная функция"},
+        true
+    });
+
+    questions.push_back({
+        "Какой контейнер реализует динамический массив в STL?",
+        "vector",
+        {"list", "vector", "map", "set"},
+        true
+    });
+
+    questions.push_back({
+        "Что делает delete[]?",
+        "Освобождает массив в памяти",
+        {"Освобождает одну переменную", "Освобождает массив в памяти",
+         "Удаляет файл", "Вызывает деструктор"},
+        true
+    });
 }
 
 int YAMPExam::runExam(Player& player) {
@@ -207,20 +351,42 @@ DiscreteExam::DiscreteExam() {
 
 void DiscreteExam::generateQuestions() {
     questions.clear();
-    questions.push_back({ "Что такое граф?",
-        "Множество вершин и рёбер", {"Множество чисел", "Множество вершин и рёбер",
-         "Матрица", "Функция"}, true });
-    questions.push_back({ "Сколько существует булевых функций от 2 переменных?",
-        "16", {"4", "8", "16", "2"}, true });
-    questions.push_back({ "Что такое отношение эквивалентности?",
+
+    questions.push_back({
+        "Что такое граф?",
+        "Множество вершин и рёбер",
+        {"Множество чисел", "Множество вершин и рёбер", "Матрица", "Функция"},
+        true
+    });
+
+    questions.push_back({
+        "Сколько существует булевых функций от 2 переменных?",
+        "16",
+        {"4", "8", "16", "2"},
+        true
+    });
+
+    questions.push_back({
+        "Что такое отношение эквивалентности?",
         "Рефлексивное, симметричное, транзитивное отношение",
         {"Симметричное отношение", "Рефлексивное, симметричное, транзитивное отношение",
-         "Транзитивное отношение", "Рефлексивное отношение"}, true });
-    questions.push_back({ "Чему равно 2^5 mod 7?",
-        "4", {"2", "3", "4", "5"}, true });
-    questions.push_back({ "Что такое деревья в теории графов?",
-        "Связные ациклические графы", {"Полные графы", "Ориентированные графы",
-         "Связные ациклические графы", "Пустые графы"}, true });
+         "Транзитивное отношение", "Рефлексивное отношение"},
+        true
+    });
+
+    questions.push_back({
+        "Чему равно 2^5 mod 7?",
+        "4",
+        {"2", "3", "4", "5"},
+        true
+    });
+
+    questions.push_back({
+        "Что такое деревья в теории графов?",
+        "Связные ациклические графы",
+        {"Полные графы", "Ориентированные графы", "Связные ациклические графы", "Пустые графы"},
+        true
+    });
 }
 
 int DiscreteExam::runExam(Player& player) {
@@ -253,18 +419,41 @@ CalculusExam::CalculusExam() {
 
 void CalculusExam::generateQuestions() {
     questions.clear();
-    questions.push_back({ "Чему равна производная sin(x)?",
-        "cos(x)", {"cos(x)", "-sin(x)", "tg(x)", "cot(x)"}, true });
-    questions.push_back({ "Что такое определённый интеграл?",
-        "Площадь под кривой", {"Производная", "Площадь под кривой", "Предел функции", "Ряд"}, true });
-    questions.push_back({ "Какая формула для производной произведения?",
-        "(uv)' = u'v + uv'", {"(uv)' = u'v'", "(uv)' = u'v + uv'",
-         "(uv)' = u'v - uv'", "(uv)' = u + v"}, true });
-    questions.push_back({ "Чему равен предел sin(x)/x при x→0?",
-        "1", {"0", "1", "∞", "-1"}, true });
-    questions.push_back({ "Что такое ряд Тейлора?",
-        "Разложение функции в степенной ряд", {"Сумма чисел", "Разложение функции в степенной ряд",
-         "Производная высшего порядка", "Интеграл"}, true });
+
+    questions.push_back({
+        "Чему равна производная sin(x)?",
+        "cos(x)",
+        {"cos(x)", "-sin(x)", "tg(x)", "cot(x)"},
+        true
+    });
+
+    questions.push_back({
+        "Что такое определённый интеграл?",
+        "Площадь под кривой",
+        {"Производная", "Площадь под кривой", "Предел функции", "Ряд"},
+        true
+    });
+
+    questions.push_back({
+        "Какая формула для производной произведения?",
+        "(uv)' = u'v + uv'",
+        {"(uv)' = u'v'", "(uv)' = u'v + uv'", "(uv)' = u'v - uv'", "(uv)' = u + v"},
+        true
+    });
+
+    questions.push_back({
+        "Чему равен предел sin(x)/x при x→0?",
+        "1",
+        {"0", "1", "∞", "-1"},
+        true
+    });
+
+    questions.push_back({
+        "Что такое ряд Тейлора?",
+        "Разложение функции в степенной ряд",
+        {"Сумма чисел", "Разложение функции в степенной ряд", "Производная высшего порядка", "Интеграл"},
+        true
+    });
 }
 
 int CalculusExam::runExam(Player& player) {
@@ -297,20 +486,41 @@ NetworksExam::NetworksExam() {
 
 void NetworksExam::generateQuestions() {
     questions.clear();
-    questions.push_back({ "Какая модель описывает взаимодействие сетевых протоколов?",
-        "OSI", {"TCP/IP", "OSI", "HTTP", "FTP"}, true });
-    questions.push_back({ "Что такое IP-адрес?",
+
+    questions.push_back({
+        "Какая модель описывает взаимодействие сетевых протоколов?",
+        "OSI",
+        {"TCP/IP", "OSI", "HTTP", "FTP"},
+        true
+    });
+
+    questions.push_back({
+        "Что такое IP-адрес?",
         "Уникальный идентификатор устройства в сети",
-        {"Номер порта", "Уникальный идентификатор устройства в сети",
-         "Доменное имя", "MAC-адрес"}, true });
-    questions.push_back({ "Какой протокол используется для передачи веб-страниц?",
-        "HTTP", {"FTP", "HTTP", "SMTP", "DNS"}, true });
-    questions.push_back({ "Что такое маска подсети?",
+        {"Номер порта", "Уникальный идентификатор устройства в сети", "Доменное имя", "MAC-адрес"},
+        true
+    });
+
+    questions.push_back({
+        "Какой протокол используется для передачи веб-страниц?",
+        "HTTP",
+        {"FTP", "HTTP", "SMTP", "DNS"},
+        true
+    });
+
+    questions.push_back({
+        "Что такое маска подсети?",
         "Определяет сетевую и хостовую часть адреса",
-        {"Пароль", "Определяет сетевую и хостовую часть адреса",
-         "Шифрование", "Маршрут"}, true });
-    questions.push_back({ "Сколько бит в IPv4-адресе?",
-        "32", {"16", "32", "64", "128"}, true });
+        {"Пароль", "Определяет сетевую и хостовую часть адреса", "Шифрование", "Маршрут"},
+        true
+    });
+
+    questions.push_back({
+        "Сколько бит в IPv4-адресе?",
+        "32",
+        {"16", "32", "64", "128"},
+        true
+    });
 }
 
 int NetworksExam::runExam(Player& player) {
