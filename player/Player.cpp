@@ -33,11 +33,13 @@ void Player::nextDay() {
     currentHour = GameConstants::START_HOUR;
     currentMinute = 0;
     currentLocation = LocationID::Home;
+
     stats.money += GameConstants::MONEY_PER_DAY_SCHOLARSHIP;
 
-    // Ежедневные изменения статов
-    // hunger теперь сытость, поэтому она УМЕНЬШАЕТСЯ
+    // Каждый новый день немного тратит сытость
     stats.hunger -= GameConstants::DAY_HUNGER_LOSS;
+
+    // За день копится усталость и стресс
     stats.fatigue += 5;
     stats.stress += 3;
 
@@ -57,8 +59,10 @@ void Player::advanceTime(int minutes) {
         nextDay();
     }
 
-    // За каждые 30 минут сытость понемногу падает
+    // За каждые 30 минут сытость падает
     stats.hunger -= (minutes / 30) * GameConstants::TIME_HUNGER_LOSS_PER_30_MIN;
+
+    // За каждый полный час растёт усталость
     stats.fatigue += minutes / 60;
 
     stats.clampAll();
@@ -66,12 +70,15 @@ void Player::advanceTime(int minutes) {
 
 std::string Player::getTimeString() const {
     std::ostringstream oss;
+
     oss.width(2);
     oss.fill('0');
     oss << currentHour << ":";
+
     oss.width(2);
     oss.fill('0');
     oss << currentMinute;
+
     return oss.str();
 }
 
@@ -91,8 +98,13 @@ int Player::getRelation(const std::string& npcName) const {
 
 void Player::modifyRelation(const std::string& npcName, int delta) {
     auto it = npcRelationships.find(npcName);
+
     if (it != npcRelationships.end()) {
-        it->second = std::clamp(it->second + delta, 0, GameConstants::MAX_STAT);
+        it->second = std::clamp(
+            it->second + delta,
+            GameConstants::MIN_STAT,
+            GameConstants::MAX_STAT
+        );
     }
 }
 
@@ -114,29 +126,43 @@ bool Player::hasBuff(BuffType buff) const {
 }
 
 void Player::applyBuffs() {
-    // Синдром самозванца: снижает интеллект на 20%
+    // Важно:
+    // часть дебаффов уже обрабатывается отдельными системами.
+    // Поэтому тут больше не дублируем сильные штрафы.
+
+    // Синдром самозванца:
+    // раньше он навсегда уменьшал интеллект на 20% при каждом обновлении.
+    // Это было слишком жёстко, поэтому здесь больше не трогаем интеллект.
+    // Сам дебафф остаётся как статус.
     if (hasBuff(BuffType::ImposterSyndrome)) {
-        stats.intellect = static_cast<int>(stats.intellect * 0.8);
+        // Пока без прямого штрафа к статам.
     }
 
-    // Выгорание: энергия не может быть выше 50
+    // Выгорание:
+    // энергия не может быть выше 50, пока висит дебафф.
+    // Это нормальный мягкий эффект, оставляем.
     if (hasBuff(BuffType::Burnout)) {
         stats.energy = std::min(stats.energy, 50);
     }
 
-    // Разбитое сердце: стресс постоянно растёт
+    // Разбитое сердце:
+    // стресс растёт, но не слишком резко.
     if (hasBuff(BuffType::BrokenHeart)) {
-        stats.stress += 2;
+        stats.stress += 1;
     }
 
-    // Сонный паралич: усталость растёт быстрее
+    // Сонный паралич:
+    // усталость уже дополнительно растёт в FatigueSystem.
+    // Поэтому здесь не добавляем ещё +5 усталости.
     if (hasBuff(BuffType::SleepParalysis)) {
-        stats.fatigue += 5;
+        // Эффект обрабатывается в FatigueSystem.
     }
 
-    // Голодание: здоровье падает
+    // Голодание:
+    // здоровье и энергия уже уменьшаются в HungerSystem.
+    // Поэтому здесь не отнимаем здоровье второй раз.
     if (hasBuff(BuffType::Starvation)) {
-        stats.health = std::max(0, stats.health - 3);
+        // Эффект обрабатывается в HungerSystem.
     }
 
     stats.clampAll();
@@ -144,36 +170,47 @@ void Player::applyBuffs() {
 
 std::string Player::serialize() const {
     std::ostringstream oss;
+
     oss << name << "\n"
-        << stats.intellect << " " << stats.energy << " "
-        << stats.fatigue << " " << stats.hunger << " "
-        << stats.stress << " " << stats.humanity << " "
-        << stats.money << " " << stats.romance << " "
+        << stats.intellect << " "
+        << stats.energy << " "
+        << stats.fatigue << " "
+        << stats.hunger << " "
+        << stats.stress << " "
+        << stats.humanity << " "
+        << stats.money << " "
+        << stats.romance << " "
         << stats.health << "\n"
-        << currentDay << " " << currentHour << " " << currentMinute << "\n"
+        << currentDay << " "
+        << currentHour << " "
+        << currentMinute << "\n"
         << static_cast<int>(currentLocation) << "\n"
         << debts << "\n";
 
     // Сохраняем оценки
     oss << grades.size() << "\n";
+
     for (const auto& [examId, grade] : grades) {
         oss << examId << " " << grade << "\n";
     }
 
     // Сохраняем флаги
     oss << flags.size() << "\n";
+
     for (const auto& [key, val] : flags) {
         oss << key << " " << (val ? "1" : "0") << "\n";
     }
 
     // Сохраняем отношения
     oss << npcRelationships.size() << "\n";
+
     for (const auto& [npc, rel] : npcRelationships) {
         oss << npc << " " << rel << "\n";
     }
 
-    // Сохраняем активные баффы
+    // Сохраняем активные дебаффы
     oss << activeBuffs.size() << "\n";
+
     for (auto b : activeBuffs) {
         oss << static_cast<int>(b) << "\n";
     }
@@ -183,52 +220,107 @@ std::string Player::serialize() const {
 
 bool Player::deserialize(const std::string& data) {
     std::istringstream iss(data);
-    if (!std::getline(iss, name)) return false;
 
-    if (!(iss >> stats.intellect >> stats.energy >> stats.fatigue
-        >> stats.hunger >> stats.stress >> stats.humanity
-        >> stats.money >> stats.romance >> stats.health)) return false;
+    if (!std::getline(iss, name)) {
+        return false;
+    }
+
+    if (!(iss >> stats.intellect
+              >> stats.energy
+              >> stats.fatigue
+              >> stats.hunger
+              >> stats.stress
+              >> stats.humanity
+              >> stats.money
+              >> stats.romance
+              >> stats.health)) {
+        return false;
+    }
 
     int locInt;
-    if (!(iss >> currentDay >> currentHour >> currentMinute >> locInt >> debts)) return false;
+
+    if (!(iss >> currentDay
+              >> currentHour
+              >> currentMinute
+              >> locInt
+              >> debts)) {
+        return false;
+    }
+
     currentLocation = static_cast<LocationID>(locInt);
 
     size_t gradeCount;
-    if (!(iss >> gradeCount)) return false;
+
+    if (!(iss >> gradeCount)) {
+        return false;
+    }
+
     grades.clear();
+
     for (size_t i = 0; i < gradeCount; i++) {
-        int examId, grade;
-        if (!(iss >> examId >> grade)) return false;
+        int examId;
+        int grade;
+
+        if (!(iss >> examId >> grade)) {
+            return false;
+        }
+
         grades[examId] = grade;
     }
 
     size_t flagCount;
-    if (!(iss >> flagCount)) return false;
+
+    if (!(iss >> flagCount)) {
+        return false;
+    }
+
     flags.clear();
+
     for (size_t i = 0; i < flagCount; i++) {
         std::string key;
         int val;
-        if (!(iss >> key >> val)) return false;
+
+        if (!(iss >> key >> val)) {
+            return false;
+        }
+
         flags[key] = (val == 1);
     }
 
     size_t relCount;
-    if (!(iss >> relCount)) return false;
+
+    if (!(iss >> relCount)) {
+        return false;
+    }
+
     npcRelationships.clear();
+
     for (size_t i = 0; i < relCount; i++) {
         std::string npc;
         int rel;
-        if (!(iss >> npc >> rel)) return false;
+
+        if (!(iss >> npc >> rel)) {
+            return false;
+        }
+
         npcRelationships[npc] = rel;
     }
 
-    // Загружаем активные баффы
-    activeBuffs.clear();
     size_t buffCount;
-    if (!(iss >> buffCount)) return false;
+
+    if (!(iss >> buffCount)) {
+        return false;
+    }
+
+    activeBuffs.clear();
+
     for (size_t i = 0; i < buffCount; i++) {
         int b;
-        if (!(iss >> b)) return false;
+
+        if (!(iss >> b)) {
+            return false;
+        }
+
         activeBuffs.push_back(static_cast<BuffType>(b));
     }
 
