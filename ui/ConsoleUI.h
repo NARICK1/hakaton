@@ -3,6 +3,7 @@
 #include "../data/UIMode.h"
 #include <string>
 #include <vector>
+#include <limits>
 
 // Pure ASCII box drawing
 #define BOX_H  "="
@@ -25,7 +26,7 @@ struct UIPanel {
     std::string title;
 };
 
-// UTF-8 aware helpers (declared for use across UI files)
+// UTF-8 aware helpers
 size_t visLen(const std::string& s);
 std::string rpad(const std::string& s, int visWidth);
 std::vector<std::string> wordWrap(const std::string& text, int visWidth);
@@ -35,6 +36,15 @@ public:
     static void SetConsoleUTF8();
     static void ClearScreen();
     static void WaitForEnter();
+
+    // Безопасный ввод числа.
+    // Не ломает cin, если игрок ввёл букву или мусор.
+    static int ReadInt(
+        const std::string& prompt = "",
+        int minValue = std::numeric_limits<int>::min(),
+        int maxValue = std::numeric_limits<int>::max()
+    );
+
     static int ShowMenu(const std::vector<std::string>& options,
                         const std::string& prompt = "Ваш выбор");
 
@@ -73,7 +83,7 @@ public:
                                        bool isEnding = false,
                                        bool endingSuccess = false);
 
-    // Backward-compat: ASCII art access (delegates to AsciiArt)
+    // Backward-compat: ASCII art access
     static std::string GetNPCPortrait(const std::string& npcName);
     static std::string GetAllaPortrait();
     static std::string GetBulatPortrait();
