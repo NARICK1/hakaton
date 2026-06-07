@@ -1401,38 +1401,60 @@ void Game::runDay8() {
     ConsoleUI::PrintHeader("ПОДВЕДЕНИЕ ИТОГОВ");
 
     const auto& stats = state.getPlayer().getStats();
+
     std::cout << BOX_TL << std::string(78, BOX_H[0]) << BOX_TR "\n";
     std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
     std::cout << BOX_V "  Сессия позади. Давай посмотрим, как всё прошло." << std::string(20, ' ') << BOX_V "\n";
     std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
 
     int totalScore = 0;
-    const char* examNames[] = {"История", "ЯиМП", "Дискретка", "Матанализ", "Комп.сети"};
+    const char* examNames[] = {
+        "История",
+        "ЯиМП",
+        "Дискретка",
+        "Матанализ",
+        "Комп.сети"
+    };
+
     for (int i = 1; i <= 5; i++) {
         int g = state.getPlayer().getGrade(i);
+
         if (g > 0) {
-            std::string line = "  " + std::string(examNames[i-1]) + ": " + std::to_string(g) + " баллов";
-            std::cout << BOX_V " " << line << std::string(78 - 3 - static_cast<int>(line.size()), ' ') << BOX_V "\n";
+            std::string line = "  " + std::string(examNames[i - 1]) + ": " + std::to_string(g) + " баллов";
+            std::cout << BOX_V " " << line
+                      << std::string(78 - 3 - static_cast<int>(line.size()), ' ')
+                      << BOX_V "\n";
             totalScore += g;
         } else {
-            std::string line = "  " + std::string(examNames[i-1]) + ": не сдан";
-            std::cout << BOX_V " " << line << std::string(78 - 3 - static_cast<int>(line.size()), ' ') << BOX_V "\n";
+            std::string line = "  " + std::string(examNames[i - 1]) + ": не сдан";
+            std::cout << BOX_V " " << line
+                      << std::string(78 - 3 - static_cast<int>(line.size()), ' ')
+                      << BOX_V "\n";
         }
     }
 
     std::cout << BOX_V "  " << std::string(74, ' ') << BOX_V "\n";
+
     std::string line = "  Итоговые характеристики:";
-    std::cout << BOX_V " " << line << std::string(78 - 3 - static_cast<int>(line.size()), ' ') << BOX_V "\n";
+    std::cout << BOX_V " " << line
+              << std::string(78 - 3 - static_cast<int>(line.size()), ' ')
+              << BOX_V "\n";
+
     auto printStat = [&](const std::string& name, int val) {
         std::string l = "    " + name + ": " + std::to_string(val);
-        std::cout << BOX_V " " << l << std::string(78 - 3 - static_cast<int>(l.size()), ' ') << BOX_V "\n";
+        std::cout << BOX_V " " << l
+                  << std::string(78 - 3 - static_cast<int>(l.size()), ' ')
+                  << BOX_V "\n";
     };
+
     printStat("Интеллект", stats.intellect);
     printStat("Человечность", stats.humanity);
     printStat("Романтика", stats.romance);
     printStat("Отношения с Аллой", state.getPlayer().getRelation("Алла"));
     printStat("Долгов", state.getPlayer().getDebts());
+
     std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
+
     ConsoleUI::WaitForEnter();
 
     // Финальный выбор
@@ -1450,26 +1472,33 @@ void Game::runDay8() {
     std::cout << std::string(40, ' ') << BOX_V "\n";
     std::cout << BOX_BL << std::string(78, BOX_H[0]) << BOX_BR "\n";
 
-    // Курсор уже в нужном месте после "Ваш выбор"
     std::cout << "\r                                                                                \r";
     std::cout << "  Ваш выбор: ";
+
     int finalChoice;
     std::cin >> finalChoice;
     std::cin.ignore(10000, '\n');
 
     if (finalChoice == 4 && state.getPlayer().getDebts() >= 3) {
-        ConsoleUI::RenderScreen("ПУТЬ",
+        ConsoleUI::RenderScreen(
+            "ПУТЬ",
             "Возможно, тебе стоит взять паузу и подумать...\n"
             "Армия — тоже вариант.",
-            {}, state.getPlayer());
+            {},
+            state.getPlayer()
+        );
+
         state.getPlayer().setFlag("army_path", true);
         ConsoleUI::WaitForEnter();
     }
 
     eventManager.tryTriggerEvent(state.getPlayer(), 8);
 
-    // Переход к концовке
-    state.getPlayer().nextDay();
+    // После 8-го дня сразу считаем концовку.
+    // nextDay() тут больше не вызываем, иначе день перескакивает лишний раз.
+    GameOverCondition ending = EndingSystem::EvaluateEnding(state.getPlayer());
+    state.setGameOverReason(ending);
+    state.setPhase(GamePhase::GameOver);
 }
 
 // ==================== ЛОКАЦИИ ====================
