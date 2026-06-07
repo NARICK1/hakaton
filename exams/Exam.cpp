@@ -153,9 +153,10 @@ int Exam::askQuestionsConsole(Player& player) const {
     // 50 = обычный экзамен
     // 70 = тяжёлый экзамен
     int difficultyModifier = (50 - difficulty) / 2;
+    int gameDifficultyModifier = player.getExamScoreModifier();
 
     int score = std::clamp(
-        baseScore + intellectBonus + difficultyModifier,
+        baseScore + intellectBonus + difficultyModifier + gameDifficultyModifier,
         0,
         100
     );
@@ -172,6 +173,10 @@ int Exam::askQuestionsConsole(Player& player) const {
 
     std::cout << "Модификатор сложности экзамена: "
               << (difficultyModifier >= 0 ? "+" : "") << difficultyModifier << "\n";
+
+    std::cout << "Модификатор выбранной сложности ("
+              << player.getDifficultyName() << "): "
+              << (gameDifficultyModifier >= 0 ? "+" : "") << gameDifficultyModifier << "\n";
 
     std::cout << "Итог до реакции преподавателя: " << score << "\n";
 

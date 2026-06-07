@@ -4,6 +4,7 @@
 #include "../events/RandomEvent.h"
 #include "../exams/Exam.h"
 #include "../save/SaveManager.h"
+#include "../data/Difficulty.h"
 #include <memory>
 #include <map>
 #include <string>
@@ -20,6 +21,8 @@ private:
 
     void initGame();
     void initNPCs();
+    DifficultyLevel selectDifficulty();
+    void applyDifficultyStartSettings(DifficultyLevel difficulty);
 
     // Пролог и сцены по дням
     void runPrologue();

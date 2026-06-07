@@ -14,6 +14,83 @@
 #include <sstream>
 #include <algorithm>
 
+namespace {
+    int scaledCost(const Player& player, int baseCost) {
+        return player.scaleCost(baseCost);
+    }
+
+    void gainIntellect(Player& player, int value) {
+        player.getStats().intellect += player.scaleGain(value);
+    }
+
+    void gainEnergy(Player& player, int value) {
+        player.getStats().energy += player.scaleGain(value);
+    }
+
+    void loseEnergy(Player& player, int value) {
+        player.getStats().energy -= player.scalePenalty(value);
+    }
+
+    void gainFatigue(Player& player, int value) {
+        player.getStats().fatigue += player.scalePenalty(value);
+    }
+
+    void reduceFatigue(Player& player, int value) {
+        player.getStats().fatigue -= player.scaleGain(value);
+    }
+
+    void reduceStress(Player& player, int value) {
+        player.getStats().stress -= player.scaleGain(value);
+    }
+
+    void gainHumanity(Player& player, int value) {
+        player.getStats().humanity += player.scaleGain(value);
+    }
+
+    void loseHumanity(Player& player, int value) {
+        player.getStats().humanity -= player.scalePenalty(value);
+    }
+
+    void gainRomance(Player& player, int value) {
+        player.getStats().romance += player.scaleGain(value);
+    }
+
+    void loseRomance(Player& player, int value) {
+        player.getStats().romance -= player.scalePenalty(value);
+    }
+
+    void gainHunger(Player& player, int value) {
+        player.getStats().hunger = std::min(
+            GameConstants::MAX_HUNGER,
+            player.getStats().hunger + player.scaleGain(value)
+        );
+    }
+
+    void loseHunger(Player& player, int value) {
+        player.getStats().hunger -= player.scalePenalty(value);
+    }
+
+    void loseHealth(Player& player, int value) {
+        player.getStats().health -= player.scalePenalty(value);
+    }
+
+    void gainMoney(Player& player, int value) {
+        player.getStats().money += player.scaleMoneyGain(value);
+    }
+
+    bool spendMoney(Player& player, int baseCost) {
+        int cost = player.scaleCost(baseCost);
+
+        if (player.getStats().money < cost) {
+            return false;
+        }
+
+        player.getStats().money -= cost;
+        return true;
+    }
+}
+
+
 Game::Game() {
     ConsoleUI::SetConsoleUTF8();
     // Load saved language preference
@@ -29,9 +106,92 @@ void Game::initNPCs() {
     artem = std::make_unique<Artem>();
 }
 
+DifficultyLevel Game::selectDifficulty() {
+    Player preview("Тимур");
+
+    ConsoleUI::RenderScreen(
+        "ВЫБОР СЛОЖНОСТИ",
+        R"(Выбери режим перед началом игры.
+
+1) Изи мод — показатели фармятся легче, штрафы мягкие, деньги тратятся легче.
+2) Нормальный — нужен менеджмент ресурсов, но игра не душит за каждую ошибку.
+3) Хард — проходится, но требует почти идеальной игры. Ошибки больно бьют.)",
+        {
+            "Изи мод",
+            "Нормальный уровень",
+            "Хард"
+        },
+        preview,
+        "",
+        "",
+        "Настройка игры"
+    );
+
+    int choice = ConsoleUI::ReadInt("", 1, 3);
+
+    DifficultyLevel difficulty = DifficultyLevel::Normal;
+
+    if (choice == 1) {
+        difficulty = DifficultyLevel::Easy;
+    } else if (choice == 3) {
+        difficulty = DifficultyLevel::Hard;
+    }
+
+    preview.setDifficulty(difficulty);
+
+    ConsoleUI::RenderScreen(
+        "СЛОЖНОСТЬ ВЫБРАНА",
+        "Выбран режим: " + preview.getDifficultyName() + "\n\n" + preview.getDifficultyDescription(),
+        {},
+        preview,
+        "",
+        "",
+        "Настройка игры"
+    );
+    ConsoleUI::WaitForEnter();
+
+    return difficulty;
+}
+
+void Game::applyDifficultyStartSettings(DifficultyLevel difficulty) {
+    Player& player = state.getPlayer();
+    auto& stats = player.getStats();
+
+    player.setDifficulty(difficulty);
+
+    stats.money = DifficultyRules::StartingMoney(difficulty, GameConstants::START_MONEY);
+    stats.stress = DifficultyRules::StartingStress(difficulty, GameConstants::START_STRESS);
+    stats.fatigue = DifficultyRules::StartingFatigue(difficulty, GameConstants::START_FATIGUE);
+    stats.intellect = DifficultyRules::StartingIntellect(difficulty, GameConstants::START_INTELLECT);
+
+    if (difficulty == DifficultyLevel::Easy) {
+        stats.energy = std::min(GameConstants::MAX_STAT, stats.energy + 10);
+        stats.humanity = std::min(GameConstants::MAX_STAT, stats.humanity + 5);
+        player.modifyRelation("Алла", 5);
+        player.modifyRelation("Булат", 5);
+        player.modifyRelation("Семён", 5);
+        player.modifyRelation("Артём", 5);
+        player.modifyRelation("Преподаватели", 5);
+    } else if (difficulty == DifficultyLevel::Hard) {
+        stats.energy = std::max(GameConstants::MIN_STAT, stats.energy - 10);
+        stats.humanity = std::max(GameConstants::MIN_STAT, stats.humanity - 5);
+        player.modifyRelation("Алла", -5);
+        player.modifyRelation("Булат", -5);
+        player.modifyRelation("Семён", -5);
+        player.modifyRelation("Артём", -5);
+        player.modifyRelation("Преподаватели", -5);
+    }
+
+    stats.clampAll();
+}
+
 void Game::initGame() {
     state = GameState();
     state.getPlayer() = Player("Тимур");
+
+    DifficultyLevel difficulty = selectDifficulty();
+    applyDifficultyStartSettings(difficulty);
+
     state.setGameStarted(true);
     state.setPhase(GamePhase::Playing);
     state.setCurrentDay(1);
@@ -202,12 +362,15 @@ void Game::offerHomeMeal(const std::string& title, bool beforeSleep) {
             "Можно поесть перед тем, как идти по делам.";
     }
 
+    int mealCost = scaledCost(player, GameConstants::EAT_MONEY_COST);
+    int mealRestore = player.scaleGain(GameConstants::EAT_HUNGER_RESTORE);
+
     ConsoleUI::RenderScreen(
         title,
         text,
         {
-            "Поесть дома (-" + std::to_string(GameConstants::EAT_MONEY_COST) +
-                " руб, +" + std::to_string(GameConstants::EAT_HUNGER_RESTORE) +
+            "Поесть дома (-" + std::to_string(mealCost) +
+                " руб, +" + std::to_string(mealRestore) +
                 " сытости)",
             "Не есть"
         },
@@ -230,7 +393,7 @@ void Game::offerHomeMeal(const std::string& title, bool beforeSleep) {
                 "",
                 "Дом"
             );
-        } else if (stats.money < GameConstants::EAT_MONEY_COST) {
+        } else if (stats.money < mealCost) {
             ConsoleUI::RenderScreen(
                 "ЕДА",
                 "Не хватает денег на еду.",
@@ -418,13 +581,13 @@ void Game::runDay1() {
         ConsoleUI::RenderScreen("УТРО", "Ты вскакиваешь, быстро умываешься, хватаешь конспект.\nБулат одобрительно свистит: «Молоток! Скорость — наше всё!»\nВы выбегаете вместе.",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Булат", 5);
-        state.getPlayer().getStats().energy -= 5;
+        loseEnergy(state.getPlayer(), 5);
         break;
     case 2:
         ConsoleUI::RenderScreen("УТРО", "Ты просишь Булата подождать. Пока ты собираешься,\nвы успеваете обсудить историю. Булат рассказывает\nпару интересных фактов про Древнюю Русь.",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Булат", 7);
-        state.getPlayer().getStats().intellect += 3;
+        gainIntellect(state.getPlayer(), 3);
         break;
     case 3:
         ConsoleUI::RenderScreen("УТРО", "Булат уходит один. Ты чувствуешь лёгкую неловкость.\nНо хотя бы есть время спокойно собраться.",
@@ -468,7 +631,7 @@ void Game::runDay1() {
         ConsoleUI::RenderScreen("АЛЛА", "Алла улыбается: «Спасибо, мне стало спокойнее.\nТы хороший друг.»",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Алла", 8);
-        state.getPlayer().getStats().romance += 3;
+        gainRomance(state.getPlayer(), 3);
         recordNPCChoice("Алла", "helped_player", 1);
         break;
     case 2:
@@ -480,7 +643,7 @@ void Game::runDay1() {
         ConsoleUI::RenderScreen("АЛЛА", "Алла быстро пересказывает ключевые даты.\nТы чувствуешь, что стало чуть понятнее.",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Алла", 10);
-        state.getPlayer().getStats().intellect += 4;
+        gainIntellect(state.getPlayer(), 4);
         recordNPCChoice("Алла", "helped_player", 1);
         break;
     case 4:
@@ -520,14 +683,14 @@ void Game::runDay1() {
     switch (choice) {
     case 1:
         state.getPlayer().modifyRelation("Алла", 3);
-        state.getPlayer().getStats().humanity += 2;
+        gainHumanity(state.getPlayer(), 2);
         break;
     case 2:
         state.getPlayer().modifyRelation("Алла", 5);
         break;
     case 3:
         state.getPlayer().modifyRelation("Алла", -2);
-        state.getPlayer().getStats().humanity -= 2;
+        loseHumanity(state.getPlayer(), 2);
         break;
     }
     ConsoleUI::WaitForEnter();
@@ -575,13 +738,13 @@ void Game::runDay2() {
 
         if (choice == 1) {
             state.getPlayer().modifyRelation("Артём", 5);
-            state.getPlayer().getStats().intellect += 2;
+            gainIntellect(state.getPlayer(), 2);
             recordNPCChoice("Артём", "helped_player", 1);
         } else if (choice == 2) {
             state.getPlayer().modifyRelation("Артём", -3);
         } else if (choice == 3) {
             state.getPlayer().modifyRelation("Артём", 8);
-            state.getPlayer().getStats().intellect += 5;
+            gainIntellect(state.getPlayer(), 5);
             recordNPCChoice("Артём", "helped_player", 1);
         }
         ConsoleUI::WaitForEnter();
@@ -598,7 +761,7 @@ void Game::runDay2() {
             "Он увлекается и объясняет 15 минут.",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Артём", 5);
-        state.getPlayer().getStats().intellect += 3;
+        gainIntellect(state.getPlayer(), 3);
         recordNPCChoice("Артём", "helped_player", 1);
         ConsoleUI::WaitForEnter();
         break;
@@ -679,8 +842,8 @@ void Game::runDay3() {
             "Ты сидишь в библиотеке, штудируешь графы и матрицы.\n"
             "Голова идёт кругом, но ты чувствуешь прогресс.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().intellect += 8;
-        state.getPlayer().getStats().fatigue += 15;
+        gainIntellect(state.getPlayer(), 8);
+        gainFatigue(state.getPlayer(), 15);
         state.getPlayer().advanceTime(180);
         break;
     }
@@ -689,9 +852,9 @@ void Game::runDay3() {
             "Ты идёшь в спортзал. Полчаса бега, турник, растяжка.\n"
             "Пот пробил, но в голове прояснилось.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().stress -= 15;
-        state.getPlayer().getStats().energy += 10;
-        state.getPlayer().getStats().fatigue += 10;
+        reduceStress(state.getPlayer(), 15);
+        gainEnergy(state.getPlayer(), 10);
+        gainFatigue(state.getPlayer(), 10);
         state.getPlayer().advanceTime(90);
         break;
     }
@@ -702,8 +865,8 @@ void Game::runDay3() {
             "Ты создаёшь примитивную модель чайника.\n"
             "Это отвлекает от мыслей об экзаменах.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().stress -= 10;
-        state.getPlayer().getStats().intellect += 3;
+        reduceStress(state.getPlayer(), 10);
+        gainIntellect(state.getPlayer(), 3);
         state.getPlayer().advanceTime(120);
         break;
     }
@@ -720,16 +883,16 @@ void Game::runDay3() {
         choice = ConsoleUI::ReadInt();
 
         if (choice == 1) {
-            state.getPlayer().getStats().intellect += 3;
+            gainIntellect(state.getPlayer(), 3);
             state.getPlayer().modifyRelation("Семён", 3);
             state.getPlayer().modifyRelation("Алла", 3);
         } else if (choice == 2) {
             state.getPlayer().modifyRelation("Алла", 5);
             state.getPlayer().modifyRelation("Семён", 2);
-            state.getPlayer().getStats().romance += 3;
-            state.getPlayer().getStats().stress -= 5;
+            gainRomance(state.getPlayer(), 3);
+            reduceStress(state.getPlayer(), 5);
         } else {
-            state.getPlayer().getStats().intellect += 5;
+            gainIntellect(state.getPlayer(), 5);
             state.getPlayer().modifyRelation("Семён", 5);
             state.getPlayer().modifyRelation("Алла", 5);
             recordNPCChoice("Алла", "helped_player", 1);
@@ -771,19 +934,19 @@ void Game::runDay4() {
     if (choice == 1) {
         ConsoleUI::RenderScreen("НОЧЬ", "Ты включаешь свет и читаешь конспект до 2 часов ночи.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().intellect += 5;
-        state.getPlayer().getStats().fatigue += 15;
-        state.getPlayer().getStats().energy -= 10;
+        gainIntellect(state.getPlayer(), 5);
+        gainFatigue(state.getPlayer(), 15);
+        loseEnergy(state.getPlayer(), 10);
     } else if (choice == 2) {
         ConsoleUI::RenderScreen("НОЧЬ", "Ты закрываешь глаза и проваливаешься в сон.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().energy += 15;
+        gainEnergy(state.getPlayer(), 15);
     } else {
         ConsoleUI::RenderScreen("НОЧЬ", "Ты играешь в мобильную игру до часу ночи.\nУтром жалеешь об этом.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().energy -= 5;
-        state.getPlayer().getStats().stress -= 3;
-        state.getPlayer().getStats().fatigue += 5;
+        loseEnergy(state.getPlayer(), 5);
+        reduceStress(state.getPlayer(), 3);
+        gainFatigue(state.getPlayer(), 5);
     }
     ConsoleUI::WaitForEnter();
 
@@ -807,7 +970,7 @@ void Game::runDay4() {
         ConsoleUI::RenderScreen("БУЛАТ", "Булат благодарит: «Спасибо, брат! Ты настоящий друг.\nДавай вместе повторим определения.»",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Булат", 10);
-        state.getPlayer().getStats().intellect += 2;
+        gainIntellect(state.getPlayer(), 2);
         recordNPCChoice("Булат", "helped_player", 1);
     } else if (choice == 2) {
         ConsoleUI::RenderScreen("БУЛАТ", "Булат вздыхает: «Ну, мы вместе прорвёмся... или вместе завалим.»",
@@ -817,7 +980,7 @@ void Game::runDay4() {
         ConsoleUI::RenderScreen("БУЛАТ", "Булат смеётся: «С тобой не соскучишься! Ладно, пошли уже.»",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Булат", 5);
-        state.getPlayer().getStats().stress -= 5;
+        reduceStress(state.getPlayer(), 5);
     }
     ConsoleUI::WaitForEnter();
 
@@ -844,20 +1007,20 @@ void Game::runDay4() {
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Семён", 5);
         state.getPlayer().setFlag("took_cheat_sheet", true);
-        state.getPlayer().getStats().humanity -= 5;
+        loseHumanity(state.getPlayer(), 5);
     } else if (choice == 2) {
         ConsoleUI::RenderScreen("ВЫБОР",
             "Ты отказываешься. Семён пожимает плечами:\n"
             "««Дело твоё. Удачи.»»",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Семён", -2);
-        state.getPlayer().getStats().humanity += 5;
+        gainHumanity(state.getPlayer(), 5);
     } else {
         ConsoleUI::RenderScreen("ВЫБОР",
             "Семён быстро, шёпотом объясняет ключевые моменты.\n"
             "Ты чувствуешь, что стало немного понятнее.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().intellect += 5;
+        gainIntellect(state.getPlayer(), 5);
         state.getPlayer().modifyRelation("Семён", 3);
         recordNPCChoice("Семён", "helped_player", 1);
     }
@@ -925,7 +1088,7 @@ void Game::runDay5() {
         ConsoleUI::RenderScreen("АЛЛА", "Алла улыбается: «Спасибо, мне правда стало легче.\nТы очень поддерживаешь меня.»",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Алла", 10);
-        state.getPlayer().getStats().romance += 5;
+        gainRomance(state.getPlayer(), 5);
         recordNPCChoice("Алла", "helped_player", 1);
         break;
     case 2:
@@ -937,8 +1100,8 @@ void Game::runDay5() {
         ConsoleUI::RenderScreen("АЛЛА", "Вы садитесь на подоконник и полчаса повторяете интегралы.\nАлла благодарна за компанию.",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Алла", 12);
-        state.getPlayer().getStats().romance += 5;
-        state.getPlayer().getStats().intellect += 3;
+        gainRomance(state.getPlayer(), 5);
+        gainIntellect(state.getPlayer(), 3);
         break;
     case 4: {
         std::string cheatText =
@@ -950,21 +1113,23 @@ void Game::runDay5() {
         }
         ConsoleUI::RenderScreen("АЛЛА", cheatText, {}, state.getPlayer());
         state.getPlayer().modifyRelation("Алла", -3);
-        state.getPlayer().getStats().humanity -= 10;
+        loseHumanity(state.getPlayer(), 10);
         ConsoleUI::WaitForEnter();
 
         // Возможность купить ответы
+        int answersCost = scaledCost(state.getPlayer(), 300);
+
         ConsoleUI::RenderScreen("ПОКУПКА ОТВЕТОВ",
-            "Ты находишь Семёна. Он продаёт ответы за 300 руб.\n"
+            "Ты находишь Семёна. Он продаёт ответы за " + std::to_string(answersCost) + " руб.\n"
             "Купишь?",
-            {"Купить ответы за 300 руб",
+            {"Купить ответы за " + std::to_string(answersCost) + " руб",
              "Передумать и надеяться на свои силы"},
             state.getPlayer());
 
         choice = ConsoleUI::ReadInt();
 
-        if (choice == 1 && state.getPlayer().getStats().money >= 300) {
-            state.getPlayer().getStats().money -= 300;
+        if (choice == 1 && state.getPlayer().getStats().money >= answersCost) {
+            spendMoney(state.getPlayer(), 300);
             state.getPlayer().setFlag("bought_answers", true);
             ConsoleUI::RenderScreen("ПОКУПКА", "Ответы у тебя. Осталось только списать.", {}, state.getPlayer());
         } else {
@@ -1014,20 +1179,32 @@ void Game::runDay5() {
             state.getPlayer(), ConsoleUI::GetBulatPortrait(), "Булат");
     }
 
-    choice = ConsoleUI::ReadInt();
+    choice = ConsoleUI::ReadInt("", 1, 3);
 
     if (choice == 1) {
-        ConsoleUI::RenderScreen("БАР", "Вы идёте в бар, берёте по пиву.\nОбсуждаете экзамены, смеётесь над преподавателями.\nНастроение улучшается!",
-            {}, state.getPlayer());
-        state.getPlayer().modifyRelation("Булат", 8);
-        state.getPlayer().getStats().stress -= 15;
-        state.getPlayer().getStats().fatigue += 10;
-        state.getPlayer().getStats().money -= 200;
+        int barCost = scaledCost(state.getPlayer(), 200);
+
+        if (state.getPlayer().getStats().money >= barCost) {
+            ConsoleUI::RenderScreen("БАР", "Вы идёте в бар, берёте по пиву.\nОбсуждаете экзамены, смеётесь над преподавателями.\nНастроение улучшается!",
+                {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Булат", 8);
+            reduceStress(state.getPlayer(), 15);
+            gainFatigue(state.getPlayer(), 10);
+            spendMoney(state.getPlayer(), 200);
+        } else {
+            ConsoleUI::RenderScreen("НЕТ ДЕНЕГ",
+                "Ты проверяешь карманы и понимаешь, что на бар не хватает денег.\n"
+                "Булат усмехается: «Ладно, брат, тогда просто прогуляемся. Главное — живы после матана».\n"
+                "Деньги не списаны.",
+                {}, state.getPlayer(), ConsoleUI::GetBulatPortrait(), "Булат");
+            state.getPlayer().modifyRelation("Булат", 2);
+            reduceStress(state.getPlayer(), 5);
+        }
     } else if (choice == 3) {
         ConsoleUI::RenderScreen("ПРОГУЛКА", "Вы гуляете полчаса, обсуждаете планы.\nБулат понимает, что тебе нужно готовиться.",
             {}, state.getPlayer());
         state.getPlayer().modifyRelation("Булат", 5);
-        state.getPlayer().getStats().stress -= 5;
+        reduceStress(state.getPlayer(), 5);
     } else {
         ConsoleUI::RenderScreen("ОТКАЗ", "Булат понимающе кивает: «Удачи с подготовкой, брат!»",
             {}, state.getPlayer());
@@ -1069,10 +1246,10 @@ void Game::runDay6() {
             "Ты отдыхаешь дома: спишь до обеда, смотришь\n"
             "Netflix, заказываешь пиццу. Благодать.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().energy += 40;
-        state.getPlayer().getStats().fatigue -= 30;
-        state.getPlayer().getStats().hunger += 10;
-        state.getPlayer().getStats().stress -= 15;
+        gainEnergy(state.getPlayer(), 40);
+        reduceFatigue(state.getPlayer(), 30);
+        gainHunger(state.getPlayer(), 10);
+        reduceStress(state.getPlayer(), 15);
         state.getPlayer().advanceTime(360);
         break;
     case 2: {
@@ -1086,13 +1263,13 @@ void Game::runDay6() {
         choice = ConsoleUI::ReadInt();
 
         if (choice == 1) {
-            state.getPlayer().getStats().money += 300;
-            state.getPlayer().getStats().fatigue += 10;
-            state.getPlayer().getStats().energy -= 10;
+            gainMoney(state.getPlayer(), 300);
+            gainFatigue(state.getPlayer(), 10);
+            loseEnergy(state.getPlayer(), 10);
         } else {
-            state.getPlayer().getStats().money += 400;
-            state.getPlayer().getStats().fatigue += 20;
-            state.getPlayer().getStats().energy -= 20;
+            gainMoney(state.getPlayer(), 400);
+            gainFatigue(state.getPlayer(), 20);
+            loseEnergy(state.getPlayer(), 20);
         }
         state.getPlayer().advanceTime(240);
         break;
@@ -1102,8 +1279,8 @@ void Game::runDay6() {
             "Ты гуляешь по городу. Солнце, птицы, мороженое.\n"
             "Жизнь прекрасна, когда нет экзаменов.",
             {}, state.getPlayer());
-        state.getPlayer().getStats().stress -= 15;
-        state.getPlayer().getStats().energy += 5;
+        reduceStress(state.getPlayer(), 15);
+        gainEnergy(state.getPlayer(), 5);
         state.getPlayer().advanceTime(120);
         break;
     case 4: {
@@ -1117,11 +1294,11 @@ void Game::runDay6() {
         choice = ConsoleUI::ReadInt();
 
         if (choice == 1) {
-            state.getPlayer().getStats().stress -= 20;
+            reduceStress(state.getPlayer(), 20);
             state.getPlayer().modifyRelation("Булат", 5);
             state.getPlayer().modifyRelation("Семён", 3);
         } else {
-            state.getPlayer().getStats().intellect += 4;
+            gainIntellect(state.getPlayer(), 4);
             state.getPlayer().modifyRelation("Семён", 5);
         }
         state.getPlayer().advanceTime(150);
@@ -1143,17 +1320,17 @@ void Game::runDay6() {
 
         if (choice == 1) {
             state.getPlayer().modifyRelation("Алла", 5);
-            state.getPlayer().getStats().romance += 3;
+            gainRomance(state.getPlayer(), 3);
         } else if (choice == 2) {
             state.getPlayer().modifyRelation("Алла", 8);
-            state.getPlayer().getStats().romance += 5;
+            gainRomance(state.getPlayer(), 5);
             state.getPlayer().setFlag("invited_alla_to_walk", true);
         } else if (choice == 3) {
             state.getPlayer().modifyRelation("Алла", 3);
-            state.getPlayer().getStats().intellect += 2;
+            gainIntellect(state.getPlayer(), 2);
         } else {
             state.getPlayer().modifyRelation("Алла", 10);
-            state.getPlayer().getStats().romance += 8;
+            gainRomance(state.getPlayer(), 8);
             recordNPCChoice("Алла", "compliment", 1);
         }
         ConsoleUI::RenderScreen("ТЕЛЕФОН",
@@ -1200,7 +1377,7 @@ void Game::runDay7() {
                 "Ты чувствуешь, что упустил что-то важное.",
                 {}, state.getPlayer());
             state.getPlayer().modifyRelation("Алла", -10);
-            state.getPlayer().getStats().romance -= 5;
+            loseRomance(state.getPlayer(), 5);
             recordNPCChoice("Алла", "refused_date", 1);
             ConsoleUI::WaitForEnter();
             goto day7_skip_date;
@@ -1239,12 +1416,14 @@ void Game::runDay7() {
             moneyCost = 300;
         }
 
-        if (state.getPlayer().getStats().money >= moneyCost) {
-            state.getPlayer().getStats().money -= moneyCost;
+        int actualDateCost = scaledCost(state.getPlayer(), moneyCost);
+
+        if (state.getPlayer().getStats().money >= actualDateCost) {
+            spendMoney(state.getPlayer(), moneyCost);
             ConsoleUI::RenderScreen("СВИДАНИЕ", dateResult, {}, state.getPlayer());
             state.getPlayer().modifyRelation("Алла", 15);
-            state.getPlayer().getStats().romance += 12;
-            state.getPlayer().getStats().stress -= 15;
+            gainRomance(state.getPlayer(), 12);
+            reduceStress(state.getPlayer(), 15);
         } else {
             ConsoleUI::RenderScreen("СВИДАНИЕ",
                 "У тебя не хватает денег на запланированное.\n"
@@ -1252,7 +1431,7 @@ void Game::runDay7() {
                 "Алла говорит, что ей всё равно нравится проводить с тобой время.",
                 {}, state.getPlayer());
             state.getPlayer().modifyRelation("Алла", 8);
-            state.getPlayer().getStats().romance += 5;
+            gainRomance(state.getPlayer(), 5);
         }
         ConsoleUI::WaitForEnter();
 
@@ -1265,7 +1444,7 @@ void Game::runDay7() {
                 "Она обнимает тебя. Ты чувствуешь тепло.",
                 {}, state.getPlayer());
             state.getPlayer().modifyRelation("Алла", 15);
-            state.getPlayer().getStats().romance += 10;
+            gainRomance(state.getPlayer(), 10);
         }
         ConsoleUI::WaitForEnter();
 
@@ -1287,7 +1466,7 @@ void Game::runDay7() {
                 "Алла смеётся: «Уютно, хоть и мокро.»",
                 {}, state.getPlayer());
             state.getPlayer().modifyRelation("Алла", 8);
-            state.getPlayer().getStats().romance += 5;
+            gainRomance(state.getPlayer(), 5);
             break;
         case 2:
             ConsoleUI::RenderScreen("ДОЖДЬ",
@@ -1295,8 +1474,8 @@ void Game::runDay7() {
                 "Она смотрит на тебя с нежностью: «Ты такой заботливый...»",
                 {}, state.getPlayer());
             state.getPlayer().modifyRelation("Алла", 12);
-            state.getPlayer().getStats().romance += 8;
-            state.getPlayer().getStats().health -= 5;
+            gainRomance(state.getPlayer(), 8);
+            loseHealth(state.getPlayer(), 5);
             break;
         case 3:
             ConsoleUI::RenderScreen("ДОЖДЬ",
@@ -1304,8 +1483,8 @@ void Game::runDay7() {
                 "Вы оба промокаете, но настроение отличное.",
                 {}, state.getPlayer());
             state.getPlayer().modifyRelation("Алла", 10);
-            state.getPlayer().getStats().romance += 7;
-            state.getPlayer().getStats().stress -= 10;
+            gainRomance(state.getPlayer(), 7);
+            reduceStress(state.getPlayer(), 10);
             break;
         }
         ConsoleUI::WaitForEnter();
@@ -1352,16 +1531,16 @@ void Game::runDay7() {
         switch (choice) {
         case 1:
             ConsoleUI::RenderScreen("ПОДГОТОВКА", "Ты зубришь комп. сети.", {}, state.getPlayer());
-            state.getPlayer().getStats().intellect += 8;
-            state.getPlayer().getStats().fatigue += 10;
+            gainIntellect(state.getPlayer(), 8);
+            gainFatigue(state.getPlayer(), 10);
             break;
         case 2:
             interactWithBulat();
             break;
         case 3:
             ConsoleUI::RenderScreen("ОТДЫХ", "Ты отдыхаешь весь день.", {}, state.getPlayer());
-            state.getPlayer().getStats().energy += 20;
-            state.getPlayer().getStats().stress -= 10;
+            gainEnergy(state.getPlayer(), 20);
+            reduceStress(state.getPlayer(), 10);
             break;
         }
         ConsoleUI::WaitForEnter();
@@ -1497,12 +1676,12 @@ void Game::handleHomeLocation() {
 
     switch (choice) {
     case 1:
-        s.energy += GameConstants::SLEEP_ENERGY_GAIN;
-        s.fatigue -= GameConstants::SLEEP_FATIGUE_REDUCE;
-        s.stress -= GameConstants::SLEEP_STRESS_REDUCE;
+        gainEnergy(state.getPlayer(), GameConstants::SLEEP_ENERGY_GAIN);
+        reduceFatigue(state.getPlayer(), GameConstants::SLEEP_FATIGUE_REDUCE);
+        reduceStress(state.getPlayer(), GameConstants::SLEEP_STRESS_REDUCE);
 
         // Сон тратит сытость.
-        s.hunger -= GameConstants::SLEEP_HUNGER_LOSS;
+        loseHunger(state.getPlayer(), GameConstants::SLEEP_HUNGER_LOSS);
 
         state.getPlayer().advanceTime(480);
 
@@ -1529,7 +1708,7 @@ void Game::handleHomeLocation() {
                 "",
                 "Дом"
             );
-        } else if (s.money < GameConstants::EAT_MONEY_COST) {
+        } else if (s.money < scaledCost(state.getPlayer(), GameConstants::EAT_MONEY_COST)) {
             ConsoleUI::RenderScreen(
                 "ЕДА",
                 "Не хватает денег на еду.",
@@ -1556,9 +1735,9 @@ void Game::handleHomeLocation() {
         break;
 
     case 3:
-        s.intellect += GameConstants::STUDY_INTELLECT_GAIN;
-        s.fatigue += GameConstants::STUDY_FATIGUE_COST;
-        s.energy -= GameConstants::STUDY_ENERGY_COST;
+        gainIntellect(state.getPlayer(), GameConstants::STUDY_INTELLECT_GAIN);
+        gainFatigue(state.getPlayer(), GameConstants::STUDY_FATIGUE_COST);
+        loseEnergy(state.getPlayer(), GameConstants::STUDY_ENERGY_COST);
 
         state.getPlayer().advanceTime(120);
 
@@ -1607,7 +1786,7 @@ void Game::handleUniversityLocation() {
     case 4: interactWithArtem(); break;
     case 5:
         ConsoleUI::RenderScreen("БИБЛИОТЕКА", "Ты занимаешься в библиотеке.", {}, state.getPlayer());
-        state.getPlayer().getStats().intellect += 5;
+        gainIntellect(state.getPlayer(), 5);
         state.getPlayer().advanceTime(120);
         ConsoleUI::WaitForEnter();
         break;
@@ -1631,7 +1810,7 @@ void Game::handleStreetLocation() {
     case 4: state.getPlayer().setLocation(LocationID::FlowerShop); break;
     case 5:
         ConsoleUI::RenderScreen("ПРОГУЛКА", "Ты гуляешь. Встречаешь знакомых.", {}, state.getPlayer());
-        state.getPlayer().getStats().stress -= 5;
+        reduceStress(state.getPlayer(), 5);
         state.getPlayer().advanceTime(30);
         ConsoleUI::WaitForEnter();
         break;
@@ -1642,12 +1821,17 @@ void Game::handleCanteenLocation() {
     ConsoleUI::PrintHeader("СТОЛОВАЯ");
     ConsoleUI::ShowLocationArt(LocationID::Canteen);
 
+    int lunchCost = scaledCost(state.getPlayer(), 150);
+    int snackCost = scaledCost(state.getPlayer(), 50);
+    int lunchRestore = state.getPlayer().scaleGain(50);
+    int snackRestore = state.getPlayer().scaleGain(20);
+
     ConsoleUI::RenderScreen(
         "СТОЛОВАЯ",
         "Что будешь заказывать?",
         {
-            "Комплексный обед (150 руб, +50 сытости)",
-            "Чай с булочкой (50 руб, +20 сытости)",
+            "Комплексный обед (" + std::to_string(lunchCost) + " руб, +" + std::to_string(lunchRestore) + " сытости)",
+            "Чай с булочкой (" + std::to_string(snackCost) + " руб, +" + std::to_string(snackRestore) + " сытости)",
             "Ничего, просто посидеть"
         },
         state.getPlayer(),
@@ -1662,10 +1846,10 @@ void Game::handleCanteenLocation() {
 
     switch (choice) {
     case 1:
-        if (s.money >= 150) {
-            s.money -= 150;
-            s.hunger = std::min(GameConstants::MAX_HUNGER, s.hunger + 50);
-            s.energy += 15;
+        if (s.money >= lunchCost) {
+            spendMoney(state.getPlayer(), 150);
+            gainHunger(state.getPlayer(), 50);
+            gainEnergy(state.getPlayer(), 15);
 
             ConsoleUI::RenderScreen(
                 "ОБЕД",
@@ -1691,10 +1875,10 @@ void Game::handleCanteenLocation() {
         break;
 
     case 2:
-        if (s.money >= 50) {
-            s.money -= 50;
-            s.hunger = std::min(GameConstants::MAX_HUNGER, s.hunger + 20);
-            s.energy += 5;
+        if (s.money >= snackCost) {
+            spendMoney(state.getPlayer(), 50);
+            gainHunger(state.getPlayer(), 20);
+            gainEnergy(state.getPlayer(), 5);
 
             ConsoleUI::RenderScreen(
                 "ПЕРЕКУС",
@@ -1729,7 +1913,7 @@ void Game::handleCanteenLocation() {
             "",
             "Столовая"
         );
-        s.stress -= 3;
+        reduceStress(state.getPlayer(), 3);
         break;
 
     default:
@@ -1754,13 +1938,20 @@ void Game::handleShopLocation() {
     ConsoleUI::PrintHeader("МАГАЗИН");
     ConsoleUI::ShowLocationArt(LocationID::Shop);
 
+    int foodCost = scaledCost(state.getPlayer(), 200);
+    int stationeryCost = scaledCost(state.getPlayer(), 100);
+    int bookCost = scaledCost(state.getPlayer(), 300);
+    int foodRestore = state.getPlayer().scaleGain(30);
+    int stationeryGain = state.getPlayer().scaleGain(2);
+    int bookGain = state.getPlayer().scaleGain(8);
+
     ConsoleUI::RenderScreen(
         "МАГАЗИН",
         "Что купить?",
         {
-            "Продукты (200 руб, +30 сытости)",
-            "Канцтовары (100 руб, +2 интеллект)",
-            "Книгу по C++ (300 руб, +8 интеллект)",
+            "Продукты (" + std::to_string(foodCost) + " руб, +" + std::to_string(foodRestore) + " сытости)",
+            "Канцтовары (" + std::to_string(stationeryCost) + " руб, +" + std::to_string(stationeryGain) + " интеллект)",
+            "Книгу по C++ (" + std::to_string(bookCost) + " руб, +" + std::to_string(bookGain) + " интеллект)",
             "Выйти"
         },
         state.getPlayer(),
@@ -1775,9 +1966,9 @@ void Game::handleShopLocation() {
 
     switch (choice) {
     case 1:
-        if (s.money >= 200) {
-            s.money -= 200;
-            s.hunger = std::min(GameConstants::MAX_HUNGER, s.hunger + 30);
+        if (s.money >= foodCost) {
+            spendMoney(state.getPlayer(), 200);
+            gainHunger(state.getPlayer(), 30);
 
             ConsoleUI::RenderScreen(
                 "ПОКУПКА",
@@ -1803,9 +1994,9 @@ void Game::handleShopLocation() {
         break;
 
     case 2:
-        if (s.money >= 100) {
-            s.money -= 100;
-            s.intellect += 2;
+        if (s.money >= stationeryCost) {
+            spendMoney(state.getPlayer(), 100);
+            gainIntellect(state.getPlayer(), 2);
 
             ConsoleUI::RenderScreen(
                 "ПОКУПКА",
@@ -1830,9 +2021,9 @@ void Game::handleShopLocation() {
         break;
 
     case 3:
-        if (s.money >= 300) {
-            s.money -= 300;
-            s.intellect += 8;
+        if (s.money >= bookCost) {
+            spendMoney(state.getPlayer(), 300);
+            gainIntellect(state.getPlayer(), 8);
 
             ConsoleUI::RenderScreen(
                 "ПОКУПКА",
@@ -1891,18 +2082,20 @@ void Game::handleFlowerShopLocation() {
     ConsoleUI::PrintHeader("ЦВЕТОЧНЫЙ МАГАЗИН");
     ConsoleUI::ShowLocationArt(LocationID::FlowerShop);
 
-    if (state.getPlayer().getStats().money >= GameConstants::FLOWER_COST) {
+    int flowerCost = scaledCost(state.getPlayer(), GameConstants::FLOWER_COST);
+
+    if (state.getPlayer().getStats().money >= flowerCost) {
         ConsoleUI::RenderScreen("ЦВЕТЫ",
             "В цветочном магазине прекрасный аромат.\n"
             "Продавщица: «Что желаете?»\n"
-            "Букет роз стоит 300 руб.",
-            {"Купить букет цветов (300 руб)", "Выйти"},
+            "Букет роз стоит " + std::to_string(flowerCost) + " руб.",
+            {"Купить букет цветов (" + std::to_string(flowerCost) + " руб)", "Выйти"},
             state.getPlayer());
 
         int choice = ConsoleUI::ReadInt();
 
         if (choice == 1) {
-            state.getPlayer().getStats().money -= GameConstants::FLOWER_COST;
+            spendMoney(state.getPlayer(), GameConstants::FLOWER_COST);
             state.getPlayer().setFlag("has_flowers", true);
             ConsoleUI::RenderScreen("ЦВЕТЫ",
                 "Ты купил прекрасный букет!\n"
@@ -1914,7 +2107,7 @@ void Game::handleFlowerShopLocation() {
 
             if (subChoice == 1) {
                 state.getPlayer().modifyRelation("Алла", 15);
-                state.getPlayer().getStats().romance += 10;
+                gainRomance(state.getPlayer(), 10);
                 state.getPlayer().setFlag("gave_flowers_to_alla", true);
                 ConsoleUI::RenderScreen("ЦВЕТЫ", "Алла в восторге!", {}, state.getPlayer());
             } else {

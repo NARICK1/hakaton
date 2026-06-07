@@ -9,8 +9,8 @@ void HungerSystem::Update(Player& player) {
     // 100 = сыт
     // 0 = умирает от голода
     if (stats.hunger <= GameConstants::STARVATION_THRESHOLD) {
-        stats.health -= 1;
-        stats.energy -= 2;
+        stats.health -= player.scalePenalty(1);
+        stats.energy -= player.scalePenalty(2);
         player.addBuff(BuffType::Starvation);
     } else {
         player.removeBuff(BuffType::Starvation);
@@ -36,19 +36,20 @@ std::string HungerSystem::GetHungerStatus(const Player& player) {
 
 void HungerSystem::Eat(Player& player, int moneySpent) {
     auto& stats = player.getStats();
+    int actualCost = player.scaleCost(moneySpent);
 
-    if (stats.money >= moneySpent) {
-        stats.money -= moneySpent;
+    if (stats.money >= actualCost) {
+        stats.money -= actualCost;
 
         // Еда восстанавливает сытость, а не уменьшает её
         stats.hunger = std::min(
             GameConstants::MAX_HUNGER,
-            stats.hunger + GameConstants::EAT_HUNGER_RESTORE
+            stats.hunger + player.scaleGain(GameConstants::EAT_HUNGER_RESTORE)
         );
 
         stats.energy = std::min(
             GameConstants::MAX_STAT,
-            stats.energy + GameConstants::EAT_ENERGY_GAIN
+            stats.energy + player.scaleGain(GameConstants::EAT_ENERGY_GAIN)
         );
 
         player.removeBuff(BuffType::Starvation);

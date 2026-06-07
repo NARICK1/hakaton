@@ -10,43 +10,43 @@ void RelationshipSystem::ApplyChoiceEffect(Player& player,
     for (const auto& [effect, value] : effects) {
         switch (effect) {
         case ChoiceEffect::IncreaseIntellect:
-            stats.intellect += value;
+            stats.intellect += player.scaleGain(value);
             break;
 
         case ChoiceEffect::DecreaseIntellect:
-            stats.intellect -= value;
+            stats.intellect -= player.scalePenalty(value);
             break;
 
         case ChoiceEffect::IncreaseEnergy:
-            stats.energy += value;
+            stats.energy += player.scaleGain(value);
             break;
 
         case ChoiceEffect::DecreaseEnergy:
-            stats.energy -= value;
+            stats.energy -= player.scalePenalty(value);
             break;
 
         case ChoiceEffect::IncreaseStress:
-            stats.stress += value;
+            stats.stress += player.scalePenalty(value);
             break;
 
         case ChoiceEffect::DecreaseStress:
-            stats.stress -= value;
+            stats.stress -= player.scaleGain(value);
             break;
 
         case ChoiceEffect::IncreaseMoney:
-            stats.money += value;
+            stats.money += player.scaleMoneyGain(value);
             break;
 
         case ChoiceEffect::DecreaseMoney:
-            stats.money -= value;
+            stats.money -= player.scaleCost(value);
             break;
 
         case ChoiceEffect::IncreaseRomance:
-            stats.romance += value;
+            stats.romance += player.scaleGain(value);
             break;
 
         case ChoiceEffect::DecreaseRomance:
-            stats.romance -= value;
+            stats.romance -= player.scalePenalty(value);
             break;
 
         case ChoiceEffect::IncreaseAllaRelation:
@@ -82,22 +82,22 @@ void RelationshipSystem::ApplyChoiceEffect(Player& player,
             break;
 
         case ChoiceEffect::IncreaseHumanity:
-            stats.humanity += value;
+            stats.humanity += player.scaleGain(value);
             break;
 
         case ChoiceEffect::DecreaseHumanity:
-            stats.humanity -= value;
+            stats.humanity -= player.scalePenalty(value);
             break;
 
         // Теперь hunger = сытость.
         // IncreaseHunger = повысить сытость.
         // DecreaseHunger = снизить сытость.
         case ChoiceEffect::IncreaseHunger:
-            stats.hunger += value;
+            stats.hunger += player.scaleGain(value);
             break;
 
         case ChoiceEffect::DecreaseHunger:
-            stats.hunger -= value;
+            stats.hunger -= player.scalePenalty(value);
             break;
 
         case ChoiceEffect::None:
