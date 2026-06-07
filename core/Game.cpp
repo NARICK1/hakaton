@@ -1014,15 +1014,25 @@ void Game::runDay5() {
             state.getPlayer(), ConsoleUI::GetBulatPortrait(), "Булат");
     }
 
-    choice = ConsoleUI::ReadInt();
+    choice = ConsoleUI::ReadInt("", 1, 3);
 
     if (choice == 1) {
-        ConsoleUI::RenderScreen("БАР", "Вы идёте в бар, берёте по пиву.\nОбсуждаете экзамены, смеётесь над преподавателями.\nНастроение улучшается!",
-            {}, state.getPlayer());
-        state.getPlayer().modifyRelation("Булат", 8);
-        state.getPlayer().getStats().stress -= 15;
-        state.getPlayer().getStats().fatigue += 10;
-        state.getPlayer().getStats().money -= 200;
+        if (state.getPlayer().getStats().money >= 200) {
+            ConsoleUI::RenderScreen("БАР", "Вы идёте в бар, берёте по пиву.\nОбсуждаете экзамены, смеётесь над преподавателями.\nНастроение улучшается!",
+                {}, state.getPlayer());
+            state.getPlayer().modifyRelation("Булат", 8);
+            state.getPlayer().getStats().stress -= 15;
+            state.getPlayer().getStats().fatigue += 10;
+            state.getPlayer().getStats().money -= 200;
+        } else {
+            ConsoleUI::RenderScreen("НЕТ ДЕНЕГ",
+                "Ты проверяешь карманы и понимаешь, что на бар не хватает денег.\n"
+                "Булат усмехается: «Ладно, брат, тогда просто прогуляемся. Главное — живы после матана».\n"
+                "Деньги не списаны.",
+                {}, state.getPlayer(), ConsoleUI::GetBulatPortrait(), "Булат");
+            state.getPlayer().modifyRelation("Булат", 2);
+            state.getPlayer().getStats().stress -= 5;
+        }
     } else if (choice == 3) {
         ConsoleUI::RenderScreen("ПРОГУЛКА", "Вы гуляете полчаса, обсуждаете планы.\nБулат понимает, что тебе нужно готовиться.",
             {}, state.getPlayer());
