@@ -16,7 +16,7 @@ call "C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Auxiliary\Build\vc
     )
 )
 
-cl /EHsc /std:c++17 /I. /Fe:student_life.exe main.cpp core\*.cpp data\*.cpp player\*.cpp npc\*.cpp exams\*.cpp events\*.cpp systems\*.cpp ui\*.cpp save\*.cpp
+cl /EHsc /std:c++17 /I. /Fe:student_life.exe main.cpp core\*.cpp player\*.cpp npc\*.cpp exams\*.cpp events\*.cpp systems\*.cpp ui\*.cpp save\*.cpp
 
 if %errorlevel% equ 0 (
     echo.
