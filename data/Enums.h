@@ -56,6 +56,21 @@ enum class GameOverCondition {
     SecretArmy
 };
 
+enum class DifficultyLevel {
+    Easy = 1,
+    Normal = 2,
+    Hard = 3
+};
+
+inline std::string difficultyToString(DifficultyLevel difficulty) {
+    switch (difficulty) {
+    case DifficultyLevel::Easy: return "Изи мод";
+    case DifficultyLevel::Normal: return "Нормальный";
+    case DifficultyLevel::Hard: return "Хард";
+    default: return "Нормальный";
+    }
+}
+
 enum class GamePhase {
     MainMenu,
     Playing,

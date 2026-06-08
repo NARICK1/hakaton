@@ -81,6 +81,43 @@ static void sleepMs(int ms) {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
+// Pending choice range for ReadInt validation
+static int g_pendingMin = std::numeric_limits<int>::min();
+static int g_pendingMax = std::numeric_limits<int>::max();
+
+void ConsoleUI::SetPendingChoiceRange(int minValue, int maxValue) {
+    g_pendingMin = minValue;
+    g_pendingMax = maxValue;
+}
+
+void ConsoleUI::ClearPendingChoiceRange() {
+    g_pendingMin = std::numeric_limits<int>::min();
+    g_pendingMax = std::numeric_limits<int>::max();
+}
+
+int ConsoleUI::ReadInt(const std::string& prompt,
+                        int minValue, int maxValue) {
+    int actualMin = std::max(minValue, g_pendingMin);
+    int actualMax = std::min(maxValue, g_pendingMax);
+    std::string p = prompt.empty()
+        ? " " + Lang::get("ui_your_choice") + ": "
+        : " " + prompt;
+    std::string input;
+    int result;
+    while (true) {
+        std::cout << p << std::flush;
+        std::getline(std::cin, input);
+        std::istringstream ss(input);
+        if (ss >> result) {
+            if (result >= actualMin && result <= actualMax) {
+                ClearPendingChoiceRange();
+                return result;
+            }
+        }
+        std::cout << " " << Lang::get("ui_invalid_choice") << "\n";
+    }
+}
+
 // ---- ConsoleUI implementation ----
 
 void ConsoleUI::SetConsoleUTF8() {
@@ -102,14 +139,13 @@ void ConsoleUI::WaitForEnter() {
     int totalW = UIModeManager::screenW();
     std::cout << "\n"
               << BOX_V " " << Lang::get("ui_press_enter") << "\n";
-    // Use event separator for wait prompts
     std::string d = DECO_EVENT;
     int dLen = static_cast<int>(visLen(d));
     int midW = totalW - dLen * 2;
     if (midW < 0) midW = 0;
     std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
-    std::cin.ignore(10000, '\n');
-    std::cin.get();
+    std::string dummy;
+    std::getline(std::cin, dummy);
 }
 
 int ConsoleUI::ShowMenu(const std::vector<std::string>& options,
@@ -134,14 +170,8 @@ int ConsoleUI::ShowMenu(const std::vector<std::string>& options,
         std::cout << BOX_V " " << rpad(line, maxW - 2) << BOX_V "\n";
     }
     std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
-    std::string p = " " + pr + ": ";
-    std::cout << BOX_V << rpad(p, maxW) << BOX_V "\n";
     std::cout << d << std::string(midW, BOX_H[0]) << d << "\n";
-    std::cout << "> ";
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
-    return choice;
+    return ReadInt(" " + pr + ": ", 1, static_cast<int>(options.size()));
 }
 
 // ---- Status Bars ----
@@ -170,7 +200,8 @@ std::string ConsoleUI::MakeTopBar(const Player& player) {
                        + std::to_string(player.getCurrentDay());
     std::string timeStr = player.getTimeString();
     std::string locStr = locationToString(player.getLocation());
-    return rpad(dayStr + " | " + timeStr + " | " + locStr, totalW);
+    std::string diffStr = difficultyToString(player.getDifficulty());
+    return rpad(dayStr + " | " + timeStr + " | " + locStr + " | " + diffStr, totalW);
 }
 
 std::string ConsoleUI::MakeStatBar(const Player& player) {
@@ -200,9 +231,9 @@ std::string ConsoleUI::MakeStatBar(const Player& player) {
     std::string bars = " ["
         + MakeBarString(s.intellect, GameConstants::MAX_STAT, barLen) + "]"
         + "[" + MakeBarString(s.energy, GameConstants::MAX_STAT, barLen) + "]"
-        + "[" + MakeBarString(100 - s.fatigue, 100, barLen) + "]"
-        + "[" + MakeBarString(100 - s.hunger, 100, barLen) + "]"
-        + "[" + MakeBarString(100 - s.stress, 100, barLen) + "]"
+        + "[" + MakeBarString(s.fatigue, GameConstants::MAX_FATIGUE, barLen) + "]"
+        + "[" + MakeBarString(s.hunger, GameConstants::MAX_HUNGER, barLen) + "]"
+        + "[" + MakeBarString(s.stress, GameConstants::MAX_STAT, barLen) + "]"
         + "[" + MakeBarString(s.money, 5000, barLen) + "]";
     return text + "  " + bars;
 }
@@ -349,13 +380,9 @@ void ConsoleUI::RenderScreen(const std::string& sceneTitle,
         std::cout << BOX_V << rpad(" " + ch, totalW) << BOX_V "\n";
     }
 
-    // Bottom frame + prompt
-    std::string prompt = " " + Lang::get("ui_your_choice") + " [1-"
-                       + std::to_string(choices.size()) + "]: ";
+    // Bottom frame
+    SetPendingChoiceRange(1, choices.empty() ? 0 : static_cast<int>(choices.size()));
     std::cout << decoLine(totalW, deco) << "\n";
-    std::cout << BOX_V << rpad(prompt, totalW) << BOX_V "\n";
-    std::cout << decoLine(totalW, deco) << "\n";
-    std::cout << "> ";
 }
 
 // ---- Auto Right Panel ----
@@ -408,9 +435,9 @@ std::string ConsoleUI::AutoRightPanel(const Player& player,
     // Stats
     const auto& stats = player.getStats();
     result += " " + Lang::get("hud_en") + ":" + MakeBarString(stats.energy, GameConstants::MAX_STAT, 10) + "\n";
-    result += " " + Lang::get("hud_fat") + ":" + MakeBarString(100 - stats.fatigue, 100, 10) + "\n";
-    result += " " + Lang::get("hud_str") + ":" + MakeBarString(100 - stats.stress, 100, 10) + "\n";
-    result += " " + Lang::get("hud_hun") + ":" + MakeBarString(100 - stats.hunger, 100, 10) + "\n";
+    result += " " + Lang::get("hud_fat") + ":" + MakeBarString(stats.fatigue, GameConstants::MAX_FATIGUE, 10) + "\n";
+    result += " " + Lang::get("hud_str") + ":" + MakeBarString(stats.stress, GameConstants::MAX_STAT, 10) + "\n";
+    result += " " + Lang::get("hud_hun") + ":" + MakeBarString(stats.hunger, GameConstants::MAX_HUNGER, 10) + "\n";
 
     // Debuffs
     if (DebuffSystem::HasAnyDebuff(player)) {
@@ -455,7 +482,8 @@ void ConsoleUI::PrintPlayerStats(const Player& player) {
     std::cout << BOX_V " " << rpad(
         player.getName() + " | " + player.getTimeString()
         + " | " + Lang::get("hud_day") + " " + std::to_string(player.getCurrentDay())
-        + " | " + locationToString(player.getLocation()),
+        + " | " + locationToString(player.getLocation())
+        + " | " + difficultyToString(player.getDifficulty()),
         totalW - 2) << " " BOX_V "\n";
     PrintSeparator();
 
@@ -662,12 +690,7 @@ void ConsoleUI::AnimateHeart(int w) {
 }
 
 int ConsoleUI::GetChoiceWithCursor(int maxChoice) {
-    (void)maxChoice;
-    std::cout << "> " << std::flush;
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
-    return choice;
+    return ReadInt("", 1, maxChoice);
 }
 
 // ---- Backward-compat wrappers ----

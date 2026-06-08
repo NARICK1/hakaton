@@ -2,6 +2,10 @@
 #include <sstream>
 #include <algorithm>
 
+void Player::setDifficulty(DifficultyLevel value) {
+    difficulty = value;
+}
+
 Player::Player(const std::string& playerName)
     : name(playerName) {
     npcRelationships["Алла"] = GameConstants::START_RELATIONSHIP;
@@ -33,12 +37,11 @@ void Player::nextDay() {
     currentHour = GameConstants::START_HOUR;
     currentMinute = 0;
     currentLocation = LocationID::Home;
-    stats.money += GameConstants::MONEY_PER_DAY_SCHOLARSHIP;
+    stats.money += scaleMoneyGain(GameConstants::MONEY_PER_DAY_SCHOLARSHIP);
 
-    // Ежедневные изменения статов
-    stats.hunger += 15;
-    stats.fatigue += 5;
-    stats.stress += 3;
+    stats.hunger -= scalePenalty(GameConstants::DAY_HUNGER_LOSS);
+    stats.fatigue += scalePenalty(5);
+    stats.stress += scalePenalty(3);
     stats.clampAll();
 }
 
@@ -52,8 +55,8 @@ void Player::advanceTime(int minutes) {
         currentHour -= GameConstants::HOURS_PER_DAY;
         nextDay();
     }
-    stats.hunger += minutes / 30;
-    stats.fatigue += minutes / 60;
+    stats.hunger -= scalePenalty((minutes / 30) * GameConstants::TIME_HUNGER_LOSS_PER_30_MIN);
+    stats.fatigue += scalePenalty(minutes / 60);
     stats.clampAll();
 }
 
@@ -85,7 +88,13 @@ int Player::getRelation(const std::string& npcName) const {
 void Player::modifyRelation(const std::string& npcName, int delta) {
     auto it = npcRelationships.find(npcName);
     if (it != npcRelationships.end()) {
-        it->second = std::clamp(it->second + delta, 0, GameConstants::MAX_STAT);
+        int scaledDelta = delta;
+        if (delta > 0) {
+            scaledDelta = scaleGain(delta);
+        } else if (delta < 0) {
+            scaledDelta = -scalePenalty(-delta);
+        }
+        it->second = std::clamp(it->second + scaledDelta, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
     }
 }
 
@@ -107,25 +116,17 @@ bool Player::hasBuff(BuffType buff) const {
 }
 
 void Player::applyBuffs() {
-    // Синдром самозванца: снижает интеллект на 20%
     if (hasBuff(BuffType::ImposterSyndrome)) {
-        stats.intellect = static_cast<int>(stats.intellect * 0.8);
     }
-    // Выгорание: энергия восстанавливается вдвое медленнее
     if (hasBuff(BuffType::Burnout)) {
         stats.energy = std::min(stats.energy, 50);
     }
-    // Разбитое сердце: стресс постоянно растёт
     if (hasBuff(BuffType::BrokenHeart)) {
-        stats.stress += 2;
+        stats.stress += 1;
     }
-    // Сонный паралич: энергия снижается быстрее
     if (hasBuff(BuffType::SleepParalysis)) {
-        stats.fatigue += 5;
     }
-    // Голодание: здоровье падает
     if (hasBuff(BuffType::Starvation)) {
-        stats.health = std::max(0, stats.health - 3);
     }
     stats.clampAll();
 }
@@ -168,6 +169,8 @@ std::string Player::serialize() const {
     for (auto b : activeBuffs) {
         oss << static_cast<int>(b) << "\n";
     }
+
+    oss << static_cast<int>(difficulty) << "\n";
 
     return oss.str();
 }
@@ -229,5 +232,19 @@ bool Player::deserialize(const std::string& data) {
         activeBuffs.push_back(static_cast<BuffType>(b));
     }
 
+    int difficultyInt = static_cast<int>(DifficultyLevel::Normal);
+    if (iss >> difficultyInt) {
+        if (difficultyInt == static_cast<int>(DifficultyLevel::Easy)) {
+            difficulty = DifficultyLevel::Easy;
+        } else if (difficultyInt == static_cast<int>(DifficultyLevel::Hard)) {
+            difficulty = DifficultyLevel::Hard;
+        } else {
+            difficulty = DifficultyLevel::Normal;
+        }
+    } else {
+        difficulty = DifficultyLevel::Normal;
+    }
+
+    stats.clampAll();
     return true;
 }

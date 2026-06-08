@@ -3,6 +3,7 @@
 #include "../data/UIMode.h"
 #include <string>
 #include <vector>
+#include <limits>
 
 // Pure ASCII box drawing (kept for layouts that must not break)
 #define BOX_H  "="
@@ -43,6 +44,11 @@ public:
     static void SetConsoleUTF8();
     static void ClearScreen();
     static void WaitForEnter();
+    static void SetPendingChoiceRange(int minValue, int maxValue);
+    static void ClearPendingChoiceRange();
+    static int ReadInt(const std::string& prompt = "",
+                       int minValue = std::numeric_limits<int>::min(),
+                       int maxValue = std::numeric_limits<int>::max());
     static int ShowMenu(const std::vector<std::string>& options,
                         const std::string& prompt = "");
 

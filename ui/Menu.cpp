@@ -126,10 +126,7 @@ void Menu::ShowMainMenu() {
 }
 
 int Menu::MainMenuChoice() {
-    std::cout << " " << Lang::get("ui_your_choice") << ": " << std::flush;
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt();
     if (choice == 0) return 0;
     return choice;
 }
@@ -204,10 +201,7 @@ void Menu::ShowSettings() {
     int mw3 = w - dl3 * 2;
     if (mw3 < 0) mw3 = 0;
     std::cout << d3 << std::string(mw3, BOX_H[0]) << d3 << "\n";
-    std::cout << " " << Lang::get("ui_your_choice") << ": " << std::flush;
-    int ch;
-    std::cin >> ch;
-    std::cin.ignore(10000, '\n');
+    int ch = ConsoleUI::ReadInt();
     if (ch == 1) { UIModeManager::setCompact(); ConsoleUI::WaitForEnter(); }
     else if (ch == 2) { UIModeManager::setStandard(); ConsoleUI::WaitForEnter(); }
     else if (ch == 3) { UIModeManager::setWide(); ConsoleUI::WaitForEnter(); }

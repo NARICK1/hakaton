@@ -29,9 +29,89 @@ void Game::initNPCs() {
     artem = std::make_unique<Artem>();
 }
 
+DifficultyLevel Game::selectDifficulty() {
+    Player preview("Тимур");
+
+    ConsoleUI::RenderScreen(
+        "Выбор сложности",
+        "Выбери уровень сложности игры.\n\n"
+        "1) Изи мод — щадящие условия, больше наград, меньше штрафов.\n"
+        "2) Нормальный — баланс, требует внимания.\n"
+        "3) Хард — ошибки наказываются жёстко.",
+        {
+            "Изи мод",
+            "Нормальный режим",
+            "Хард"
+        },
+        preview,
+        "",
+        "",
+        "Выбор сложности"
+    );
+
+    int choice = ConsoleUI::ReadInt("", 1, 3);
+
+    DifficultyLevel difficulty = DifficultyLevel::Normal;
+
+    if (choice == 1) {
+        difficulty = DifficultyLevel::Easy;
+    } else if (choice == 3) {
+        difficulty = DifficultyLevel::Hard;
+    }
+
+    preview.setDifficulty(difficulty);
+
+    ConsoleUI::RenderScreen(
+        "Сложность выбрана",
+        "Твой режим: " + preview.getDifficultyName() + "\n\n" + preview.getDifficultyDescription(),
+        {},
+        preview,
+        "",
+        "",
+        "Выбор сложности"
+    );
+    ConsoleUI::WaitForEnter();
+
+    return difficulty;
+}
+
+void Game::applyDifficultyStartSettings(DifficultyLevel difficulty) {
+    Player& player = state.getPlayer();
+    auto& stats = player.getStats();
+
+    player.setDifficulty(difficulty);
+
+    stats.money = DifficultyRules::StartingMoney(difficulty, GameConstants::START_MONEY);
+    stats.stress = DifficultyRules::StartingStress(difficulty, GameConstants::START_STRESS);
+    stats.fatigue = DifficultyRules::StartingFatigue(difficulty, GameConstants::START_FATIGUE);
+    stats.intellect = DifficultyRules::StartingIntellect(difficulty, GameConstants::START_INTELLECT);
+
+    if (difficulty == DifficultyLevel::Easy) {
+        stats.energy = std::min(GameConstants::MAX_STAT, stats.energy + 10);
+        stats.humanity = std::min(GameConstants::MAX_STAT, stats.humanity + 5);
+        player.modifyRelation("Алла", 5);
+        player.modifyRelation("Булат", 5);
+        player.modifyRelation("Семён", 5);
+        player.modifyRelation("Артём", 5);
+        player.modifyRelation("Преподаватели", 5);
+    } else if (difficulty == DifficultyLevel::Hard) {
+        stats.energy = std::max(GameConstants::MIN_STAT, stats.energy - 10);
+        stats.humanity = std::max(GameConstants::MIN_STAT, stats.humanity - 5);
+        player.modifyRelation("Алла", -5);
+        player.modifyRelation("Булат", -5);
+        player.modifyRelation("Семён", -5);
+        player.modifyRelation("Артём", -5);
+        player.modifyRelation("Преподаватели", -5);
+    }
+
+    stats.clampAll();
+}
+
 void Game::initGame() {
     state = GameState();
     state.getPlayer() = Player("Тимур");
+    DifficultyLevel difficulty = selectDifficulty();
+    applyDifficultyStartSettings(difficulty);
     state.setGameStarted(true);
     state.setPhase(GamePhase::Playing);
     state.setCurrentDay(1);
@@ -197,9 +277,7 @@ void Game::offerHomeMeal(const std::string& title, bool beforeSleep) {
         "Дом"
     );
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 2);
 
     if (choice == 1) {
         if (stats.hunger >= GameConstants::MAX_HUNGER) {
@@ -420,9 +498,7 @@ void Game::runDay1() {
     std::cout << "2. Билет посередине\n";
     std::cout << "3. Билет справа\n";
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 3);
 
     // Билет оказывается незнакомым
     std::cout << "\nТы открываешь билет... Он оказывается незнакомым!\n";
@@ -435,8 +511,7 @@ void Game::runDay1() {
     std::cout << "2. Дождаться, пока преподаватель выйдет, и посмотреть в телефоне ответы\n";
     std::cout << "3. Отвечать самостоятельно\n";
 
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    choice = ConsoleUI::ReadInt("", 1, 3);
 
     int allaRelation = state.getPlayer().getRelation("Алла");
 
@@ -450,8 +525,7 @@ void Game::runDay1() {
             std::cout << "1. Подождать еще час\n";
             std::cout << "2. Сдать сейчас\n";
 
-            std::cin >> choice;
-            std::cin.ignore(10000, '\n');
+            choice = ConsoleUI::ReadInt("", 1, 2);
 
             if (choice == 1) {
                 // 1.1.1.1.1 Подождать час
@@ -486,8 +560,7 @@ void Game::runDay1() {
             std::cout << "1. Подождать еще час\n";
             std::cout << "2. Выйти в туалет\n";
 
-            std::cin >> choice;
-            std::cin.ignore(10000, '\n');
+            choice = ConsoleUI::ReadInt("", 1, 2);
 
             if (choice == 1) {
                 waitHours++;
@@ -505,8 +578,7 @@ void Game::runDay1() {
                 std::cout << "1. Попросить помощь\n";
                 std::cout << "2. Умыть лицо\n";
 
-                std::cin >> choice;
-                std::cin.ignore(10000, '\n');
+                choice = ConsoleUI::ReadInt("", 1, 2);
 
                 if (choice == 1) {
                     // 1.1.2.1.1.1.1.1 Попросить помощь
@@ -776,9 +848,7 @@ void Game::runDay3() {
     std::cout << "Твой ответ:\n";
     std::cout << "1. Да, дам ответ после физкультуры\n";
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 1);
     
     // 3.1.1.1 Главный герой говорит, что даст ответ после физкультуры
     std::cout << "\nТы: «Да, дам ответ после физкультуры»\n";
@@ -807,8 +877,7 @@ void Game::runDay3() {
     std::cout << "1. Пойти с Семёном в столовую\n";
     std::cout << "2. Отказаться: «Спасибо, Семён, что позвал. Но я хочу поесть в одиночестве»\n";
 
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    choice = ConsoleUI::ReadInt("", 1, 2);
 
     if (choice == 1) {
         // 3.3.1 Пойти с Семёном
@@ -838,8 +907,7 @@ void Game::runDay3() {
     std::cout << "1. Начать милый разговор\n";
     std::cout << "2. Спросить про учёбу\n";
 
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    choice = ConsoleUI::ReadInt("", 1, 2);
 
     if (choice == 1) {
         // 3.4.1.1 Начать милый разговор
@@ -917,9 +985,7 @@ void Game::runDay4() {
     std::cout << "1. Лечь спать\n";
     std::cout << "2. Играть всю ночь\n";
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 2);
 
     if (choice == 1) {
         // 4.1.1 Лечь спать
@@ -947,8 +1013,7 @@ void Game::runDay4() {
     std::cout << "1. Помочь Булату\n";
     std::cout << "2. Не помогать и поискать Аллу\n";
 
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    choice = ConsoleUI::ReadInt("", 1, 2);
 
     if (choice == 1) {
         // 4.2.1 Помочь Булату
@@ -990,8 +1055,7 @@ void Game::runDay4() {
         std::cout << "1. Решать самостоятельно\n";
         std::cout << "2. Спросить помощь у Булата\n";
         
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        choice = ConsoleUI::ReadInt("", 1, 2);
         
         if (choice == 1) {
             // 4.3.1.1.1 Решать самостоятельно
@@ -1030,8 +1094,7 @@ void Game::runDay4() {
         std::cout << "1. Попытаться решить самостоятельно\n";
         std::cout << "2. Попросить помощь у Булата\n";
         
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        choice = ConsoleUI::ReadInt("", 1, 2);
         
         if (choice == 1) {
             // 4.3.1.2.1.1 Попытаться решить самостоятельно
@@ -1147,9 +1210,7 @@ void Game::runDay5() {
             state.getPlayer(), ConsoleUI::GetAllaPortrait(), "Алла");
     }
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 4);
 
     switch (choice) {
     case 1:
@@ -1192,8 +1253,7 @@ void Game::runDay5() {
              "Передумать и надеяться на свои силы"},
             state.getPlayer());
 
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        choice = ConsoleUI::ReadInt("", 1, 2);
 
         if (choice == 1 && state.getPlayer().getStats().money >= 300) {
             state.getPlayer().getStats().money -= 300;
@@ -1235,8 +1295,7 @@ void Game::runDay5() {
             state.getPlayer(), ConsoleUI::GetBulatPortrait(), "Булат");
     }
 
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    choice = ConsoleUI::ReadInt("", 1, 3);
 
     if (choice == 1) {
         ConsoleUI::RenderScreen("БАР", "Вы идёте в бар, берёте по пиву.\nОбсуждаете экзамены, смеётесь над преподавателями.\nНастроение улучшается!",
@@ -1283,9 +1342,7 @@ void Game::runDay6() {
             state.getPlayer());
     }
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 5);
 
     switch (choice) {
     case 1:
@@ -1307,8 +1364,7 @@ void Game::runDay6() {
              "Работать курьером (+400 руб, но устанешь)"},
             state.getPlayer());
 
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        choice = ConsoleUI::ReadInt("", 1, 2);
 
         if (choice == 1) {
             state.getPlayer().getStats().money += 300;
@@ -1339,8 +1395,7 @@ void Game::runDay6() {
              "Обсуждать учёбу и стратегию"},
             state.getPlayer());
 
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        choice = ConsoleUI::ReadInt("", 1, 2);
 
         if (choice == 1) {
             state.getPlayer().getStats().stress -= 20;
@@ -1365,8 +1420,7 @@ void Game::runDay6() {
              "Сказать комплимент"},
             state.getPlayer());
 
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        choice = ConsoleUI::ReadInt("", 1, 4);
 
         if (choice == 1) {
             state.getPlayer().modifyRelation("Алла", 5);
@@ -1418,9 +1472,7 @@ void Game::runDay7() {
                 state.getPlayer(), ConsoleUI::GetAllaPortrait(), "Алла");
         }
 
-        int choice;
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        int choice = ConsoleUI::ReadInt("", 1, 2);
 
         if (choice == 2) {
             ConsoleUI::RenderScreen("ОТКАЗ",
@@ -1443,8 +1495,7 @@ void Game::runDay7() {
              "В кино — классика свиданий"},
             state.getPlayer(), ConsoleUI::GetAllaPortrait(), "Алла");
 
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        choice = ConsoleUI::ReadInt("", 1, 3);
 
         std::string dateResult;
         int moneyCost = 0;
@@ -1508,8 +1559,7 @@ void Game::runDay7() {
              "Сказать: «Романтика, правда?» и улыбнуться"},
             state.getPlayer());
 
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        choice = ConsoleUI::ReadInt("", 1, 3);
 
         switch (choice) {
         case 1:
@@ -1578,9 +1628,7 @@ void Game::runDay7() {
                 state.getPlayer());
         }
 
-        int choice;
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        int choice = ConsoleUI::ReadInt("", 1, 3);
 
         switch (choice) {
         case 1:
@@ -1725,9 +1773,7 @@ void Game::handleHomeLocation() {
         "Дом"
     );
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 3);
 
     auto& s = state.getPlayer().getStats();
 
@@ -1834,9 +1880,7 @@ void Game::handleUniversityLocation() {
         {"Аллу", "Булата", "Семёна", "Артёма", "Пойти в библиотеку"},
         state.getPlayer());
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 5);
 
     switch (choice) {
     case 1: interactWithAlla(); break;
@@ -1860,9 +1904,7 @@ void Game::handleStreetLocation() {
         {"В университет", "В столовую", "В магазин", "В цветочный магазин", "Просто гулять"},
         state.getPlayer());
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 5);
 
     switch (choice) {
     case 1: state.getPlayer().setLocation(LocationID::University); break;
@@ -1896,9 +1938,7 @@ void Game::handleCanteenLocation() {
         "Столовая"
     );
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 3);
 
     auto& s = state.getPlayer().getStats();
 
@@ -2011,9 +2051,7 @@ void Game::handleShopLocation() {
         "Магазин"
     );
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, 4);
 
     auto& s = state.getPlayer().getStats();
 
@@ -2143,9 +2181,7 @@ void Game::handleFlowerShopLocation() {
             {"Купить букет цветов (300 руб)", "Выйти"},
             state.getPlayer());
 
-        int choice;
-        std::cin >> choice;
-        std::cin.ignore(10000, '\n');
+        int choice = ConsoleUI::ReadInt("", 1, 2);
 
         if (choice == 1) {
             state.getPlayer().getStats().money -= GameConstants::FLOWER_COST;
@@ -2193,9 +2229,7 @@ void Game::interactWithAlla() {
     std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, static_cast<int>(choices.size()));
 
     if (choice > 0 && choice <= static_cast<int>(choices.size())) {
         const auto& selected = choices[choice - 1];
@@ -2236,9 +2270,7 @@ void Game::interactWithBulat() {
     std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, static_cast<int>(choices.size()));
 
     if (choice > 0 && choice <= static_cast<int>(choices.size())) {
         const auto& selected = choices[choice - 1];
@@ -2268,9 +2300,7 @@ void Game::interactWithSemen() {
     std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, static_cast<int>(choices.size()));
 
     if (choice > 0 && choice <= static_cast<int>(choices.size())) {
         const auto& selected = choices[choice - 1];
@@ -2300,9 +2330,7 @@ void Game::interactWithArtem() {
     std::cout << DECO_EVENT << std::string(74, BOX_H[0]) << DECO_EVENT "\n";
     std::cout << BOX_V " Ваш выбор: ";
 
-    int choice;
-    std::cin >> choice;
-    std::cin.ignore(10000, '\n');
+    int choice = ConsoleUI::ReadInt("", 1, static_cast<int>(choices.size()));
 
     if (choice > 0 && choice <= static_cast<int>(choices.size())) {
         const auto& selected = choices[choice - 1];

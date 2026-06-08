@@ -2,6 +2,7 @@
 #include "Stats.h"
 #include "../data/Enums.h"
 #include "../data/GameConfig.h"
+#include "../data/Difficulty.h"
 #include <string>
 #include <map>
 #include <vector>
@@ -18,6 +19,7 @@ private:
     LocationID currentLocation = LocationID::Home;
     std::map<std::string, bool> flags;
     std::vector<BuffType> activeBuffs;
+    DifficultyLevel difficulty = DifficultyLevel::Normal;
 
     // Отношения с NPC
     std::map<std::string, int> npcRelationships;
@@ -41,6 +43,17 @@ public:
     int getCurrentMinute() const { return currentMinute; }
     LocationID getLocation() const { return currentLocation; }
     void setLocation(LocationID loc) { currentLocation = loc; }
+
+    // Сложность
+    DifficultyLevel getDifficulty() const { return difficulty; }
+    void setDifficulty(DifficultyLevel value);
+    std::string getDifficultyName() const { return difficultyToString(difficulty); }
+    std::string getDifficultyDescription() const { return DifficultyRules::Description(difficulty); }
+    int scaleGain(int value) const { return DifficultyRules::PositiveGain(difficulty, value); }
+    int scalePenalty(int value) const { return DifficultyRules::Penalty(difficulty, value); }
+    int scaleMoneyGain(int value) const { return DifficultyRules::MoneyGain(difficulty, value); }
+    int scaleCost(int value) const { return DifficultyRules::MoneyCost(difficulty, value); }
+    int getExamScoreModifier() const { return DifficultyRules::ExamScoreModifier(difficulty); }
 
     // Время
     void advanceTime(int minutes);

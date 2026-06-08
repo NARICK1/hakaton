@@ -8,11 +8,16 @@
 #include "../systems/Encyclopedia.h"
 #include "../systems/Achievements.h"
 #include "../systems/Habits.h"
+#include "../data/Difficulty.h"
 #include <memory>
 #include <map>
 #include <string>
 
 class Game {
+private:
+    DifficultyLevel selectDifficulty();
+    void applyDifficultyStartSettings(DifficultyLevel difficulty);
+
 private:
     GameState state;
     std::unique_ptr<Alla> alla;
