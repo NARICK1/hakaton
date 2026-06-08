@@ -35,6 +35,12 @@ private:
     void runDay7();
     void runDay8();
 
+    // Дополнительные сцены дней 6-7
+    void runDay6DatePreparation();
+    void runDateWithAlla();
+    void runRetakeExam();
+    void runNormalDay7();
+
     // Еда дома утром / вечером
     void offerHomeMeal(const std::string& title, bool beforeSleep);
 
