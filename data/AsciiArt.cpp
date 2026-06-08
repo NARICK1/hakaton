@@ -3,7 +3,7 @@
 
 namespace AsciiArt {
 
-// ---- Enlarged NPC Portraits (7-9 lines, 20-22 chars wide) ----
+//Добавили корреткное отображение персонжаей
 
 std::string GetAlla() 
 {
