@@ -38,5 +38,5 @@ struct Stats {
         selfEsteem = std::clamp(selfEsteem, 0, 100);
     }
 
-    bool isAlive() const { return health > 0 && hunger < GameConstants::MAX_HUNGER; }
+    bool isAlive() const { return health > 0 && hunger > 0; }
 };

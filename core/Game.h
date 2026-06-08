@@ -10,6 +10,7 @@
 #include "../systems/Habits.h"
 #include <memory>
 #include <map>
+#include <string>
 
 class Game {
 private:
@@ -28,7 +29,6 @@ private:
     void initGame();
     void initNPCs();
 
-    // Пролог и сцены по дням
     void runPrologue();
     void runDay1();
     void runDay2();
@@ -39,7 +39,8 @@ private:
     void runDay7();
     void runDay8();
 
-    // Системы локаций
+    void offerHomeMeal(const std::string& title, bool beforeSleep);
+
     void handleLocation(LocationID loc);
     void handleHomeLocation();
     void handleUniversityLocation();
@@ -48,32 +49,26 @@ private:
     void handleShopLocation();
     void handleFlowerShopLocation();
 
-    // Взаимодействие с NPC
     void interactWithAlla();
     void interactWithBulat();
     void interactWithSemen();
     void interactWithArtem();
     void recordNPCChoice(const std::string& npcName, const std::string& choiceKey, int value = 1);
 
-    // Экзамены
     int takeExam(Exam& exam, int examId);
 
-    // Сохранение/загрузка
     void saveGame();
     void loadGame();
 
-    // Системы
     void applyDailySystems();
     void checkGameOver();
     void checkAchievements();
 
-    // UI для новых систем
     void showJournal();
     void showEncyclopedia();
     void showAchievements();
     void showHabits();
 
-    // Изменение скрытых параметров
     void modifyHiddenStat(const std::string& stat, int delta);
 
 public:
