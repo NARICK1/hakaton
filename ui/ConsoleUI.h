@@ -16,6 +16,13 @@
 #define BOX_R  "+"
 #define BOX_X  "+"
 
+#define DECO_EVENT   "◆"
+#define DECO_EXAM    "◈"
+#define DECO_ROMANCE "♡"
+#define DECO_CALL    "☎"
+#define DECO_SPECIAL "✦"
+#define DECO_LINE    "═"
+
 #define BAR_EMPTY "."
 #define BAR_HALF  ":"
 #define BAR_FULL  "#"
@@ -71,8 +78,8 @@ public:
     static void ShowExamPanel(const std::string& examName, int score);
 
     // Legacy text helpers
-    static void PrintHeader(const std::string& title);
-    static void PrintSeparator();
+    static void PrintHeader(const std::string& title, const std::string& deco = "");
+    static void PrintSeparator(const std::string& deco = "");
     static void PrintPlayerStats(const Player& player);
     static void PrintDayHeader(int day, const std::string& dayName);
     static void PrintStatus(const Player& player);

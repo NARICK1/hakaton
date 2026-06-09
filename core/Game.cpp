@@ -2,6 +2,7 @@
 #include "../ui/ConsoleUI.h"
 #include "../ui/Menu.h"
 #include "../ui/DevMode.h"
+#include "../ui/Credits.h"
 #include "../systems/EndingSystem.h"
 #include "../systems/RelationshipSystem.h"
 #include "../systems/FatigueSystem.h"
@@ -238,6 +239,11 @@ void Game::initGame() {
     state.setCurrentDay(1);
     initNPCs();
     eventManager = RandomEventManager();
+    achievements = AchievementSystem();
+    journal.clear();
+    encyclopedia = Encyclopedia();
+    habits = HabitSystem();
+    addJournalEntry("Дом", "Началась новая игра.", "story", 4);
 }
 
 void Game::run() {
@@ -270,6 +276,10 @@ void Game::run() {
 
             case 5:
                 DevMode::ShowDevMenu();
+                break;
+
+            case 6:
+                Credits::ShowCreditsMain();
                 break;
 
             case 0:
@@ -373,6 +383,7 @@ void Game::applyDailySystems() {
     FatigueSystem::Update(state.getPlayer());
     HungerSystem::Update(state.getPlayer());
     DebuffSystem::Update(state.getPlayer());
+    checkAchievements();
 }
 
 void Game::checkGameOver() {
@@ -382,6 +393,206 @@ void Game::checkGameOver() {
         state.setPhase(GamePhase::GameOver);
     }
 }
+
+void Game::addJournalEntry(const std::string& location,
+                           const std::string& description,
+                           const std::string& category,
+                           int importance) {
+    journal.addEntry(
+        state.getPlayer().getCurrentDay(),
+        location,
+        description,
+        category,
+        importance
+    );
+}
+
+void Game::checkAchievements() {
+    Player& player = state.getPlayer();
+    const auto& stats = player.getStats();
+
+    auto unlockAndNotify = [&](const std::string& id) {
+        if (!achievements.unlock(id)) {
+            return;
+        }
+
+        const Achievement* achievement = achievements.getAchievement(id);
+        if (!achievement) {
+            return;
+        }
+
+        journal.addEntry(
+            player.getCurrentDay(),
+            "Система",
+            "Открыто достижение: " + achievement->title,
+            "achievement",
+            4
+        );
+
+        ConsoleUI::RenderScreen(
+            "ДОСТИЖЕНИЕ",
+            "Открыто новое достижение!\n\n" + achievement->title + "\n" + achievement->description,
+            {},
+            player,
+            "",
+            "",
+            "Система"
+        );
+        ConsoleUI::WaitForEnter();
+    };
+
+    if (stats.money >= 5000) {
+        unlockAndNotify("millionaire");
+    }
+
+    if (player.getCurrentDay() >= GameConstants::TOTAL_DAYS) {
+        unlockAndNotify("survivor");
+    }
+
+    bool hasAnyExam = false;
+    bool hasExcellentExam = false;
+    bool allGoodExams = true;
+
+    for (int examId = 1; examId <= 5; examId++) {
+        int grade = player.getGrade(examId);
+
+        if (grade > 0) {
+            hasAnyExam = true;
+        }
+
+        if (grade >= 85) {
+            hasExcellentExam = true;
+        }
+
+        if (grade < 70) {
+            allGoodExams = false;
+        }
+    }
+
+    if (hasAnyExam) {
+        unlockAndNotify("first_exam");
+    }
+
+    if (hasExcellentExam) {
+        unlockAndNotify("excellent");
+    }
+
+    if (allGoodExams) {
+        unlockAndNotify("all_exams");
+    }
+
+    if (player.getRelation("Алла") >= 80 ||
+        player.getRelation("Булат") >= 80 ||
+        player.getRelation("Семён") >= 80 ||
+        player.getRelation("Артём") >= 80) {
+        unlockAndNotify("friend");
+    }
+
+    if (player.getRelation("Алла") >= 80 && stats.romance >= 60) {
+        unlockAndNotify("romance");
+    }
+}
+
+void Game::showAchievements() {
+    std::ostringstream text;
+    text << "Открыто: " << achievements.getUnlockedCount()
+         << "/" << achievements.getTotalCount() << "\n\n";
+
+    for (const Achievement* achievement : achievements.getAll()) {
+        text << (achievement->unlocked ? "[+] " : "[-] ")
+             << achievement->title << " — " << achievement->description << "\n";
+    }
+
+    ConsoleUI::RenderScreen(
+        "ДОСТИЖЕНИЯ",
+        text.str(),
+        {},
+        state.getPlayer(),
+        "",
+        "",
+        "Дом"
+    );
+    ConsoleUI::WaitForEnter();
+}
+
+void Game::showJournal() {
+    std::ostringstream text;
+    auto recentEntries = journal.getRecent(12);
+
+    if (recentEntries.empty()) {
+        text << "Журнал пока пуст. События появятся по мере прохождения.";
+    } else {
+        for (const auto& entry : recentEntries) {
+            text << entry.toString() << "\n";
+        }
+    }
+
+    ConsoleUI::RenderScreen(
+        "ЖУРНАЛ СОБЫТИЙ",
+        text.str(),
+        {},
+        state.getPlayer(),
+        "",
+        "",
+        "Дом"
+    );
+    ConsoleUI::WaitForEnter();
+}
+
+void Game::showEncyclopedia() {
+    std::ostringstream text;
+    auto names = encyclopedia.getAllNames();
+
+    for (const auto& name : names) {
+        const NPCLore* entry = encyclopedia.getEntry(name);
+        if (!entry) {
+            continue;
+        }
+
+        if (entry->discovered) {
+            text << entry->formatEntry() << "\n\n";
+        } else {
+            text << "??? — запись ещё не открыта. Поговори с этим персонажем.\n\n";
+        }
+    }
+
+    ConsoleUI::RenderScreen(
+        "ЭНЦИКЛОПЕДИЯ NPC",
+        text.str(),
+        {},
+        state.getPlayer(),
+        "",
+        "",
+        "Дом"
+    );
+    ConsoleUI::WaitForEnter();
+}
+
+void Game::showHabits() {
+    std::ostringstream text;
+
+    for (const Habit* habit : habits.getAllHabits()) {
+        text << (habit->isPositive ? "[+] " : "[-] ")
+             << habit->title
+             << " | серия: " << habit->streak
+             << " | рекорд: " << habit->bestStreak
+             << " | всего дней: " << habit->totalDays
+             << "\n"
+             << habit->description << "\n\n";
+    }
+
+    ConsoleUI::RenderScreen(
+        "ПРИВЫЧКИ",
+        text.str(),
+        {},
+        state.getPlayer(),
+        "",
+        "",
+        "Дом"
+    );
+    ConsoleUI::WaitForEnter();
+}
+
 
 void Game::offerHomeMeal(const std::string& title, bool beforeSleep) {
     Player& player = state.getPlayer();
@@ -476,6 +687,10 @@ void Game::saveGame() {
     addNPCData(*semen);
     addNPCData(*artem);
     state.setNPCMemoryData(npcData);
+    state.setJournalData(journal.serialize());
+    state.setEncyclopediaData(encyclopedia.serialize());
+    state.setAchievementsData(achievements.serialize());
+    state.setHabitsData(habits.serialize());
     SaveManager::SaveGame(state);
 }
 
@@ -501,6 +716,22 @@ void Game::loadGame() {
             restoreNPC(*bulat, "Булат");
             restoreNPC(*semen, "Семён");
             restoreNPC(*artem, "Артём");
+        }
+
+        if (!state.getJournalData().empty()) {
+            journal.deserialize(state.getJournalData());
+        }
+
+        if (!state.getEncyclopediaData().empty()) {
+            encyclopedia.deserialize(state.getEncyclopediaData());
+        }
+
+        if (!state.getAchievementsData().empty()) {
+            achievements.deserialize(state.getAchievementsData());
+        }
+
+        if (!state.getHabitsData().empty()) {
+            habits.deserialize(state.getHabitsData());
         }
     }
 }
@@ -2623,7 +2854,11 @@ void Game::handleHomeLocation() {
         {
             "Лечь спать",
             "Поесть",
-            "Позаниматься"
+            "Позаниматься",
+            "Журнал событий",
+            "Энциклопедия NPC",
+            "Достижения",
+            "Привычки"
         },
         state.getPlayer(),
         "",
@@ -2699,6 +2934,10 @@ void Game::handleHomeLocation() {
         gainIntellect(state.getPlayer(), GameConstants::STUDY_INTELLECT_GAIN);
         gainFatigue(state.getPlayer(), GameConstants::STUDY_FATIGUE_COST);
         loseEnergy(state.getPlayer(), GameConstants::STUDY_ENERGY_COST);
+        state.getPlayer().getStats().motivation += state.getPlayer().scaleGain(3);
+        state.getPlayer().getStats().confidence += state.getPlayer().scaleGain(2);
+        habits.recordDay("study_daily", state.getPlayer().getCurrentDay());
+        addJournalEntry("Дом", "Тимур позанимался дома.", "study", 3);
 
         state.getPlayer().advanceTime(120);
 
@@ -2712,6 +2951,22 @@ void Game::handleHomeLocation() {
             "",
             "Дом"
         );
+        break;
+
+    case 4:
+        showJournal();
+        break;
+
+    case 5:
+        showEncyclopedia();
+        break;
+
+    case 6:
+        showAchievements();
+        break;
+
+    case 7:
+        showHabits();
         break;
 
     default:
@@ -2728,7 +2983,11 @@ void Game::handleHomeLocation() {
     }
 
     s.clampAll();
-    ConsoleUI::WaitForEnter();
+    checkAchievements();
+
+    if (choice < 4 || choice > 7) {
+        ConsoleUI::WaitForEnter();
+    }
 }
 
 void Game::handleUniversityLocation() {
@@ -2748,6 +3007,10 @@ void Game::handleUniversityLocation() {
     case 5:
         ConsoleUI::RenderScreen("БИБЛИОТЕКА", "Ты занимаешься в библиотеке.", {}, state.getPlayer());
         gainIntellect(state.getPlayer(), 5);
+        state.getPlayer().getStats().motivation += state.getPlayer().scaleGain(2);
+        habits.recordDay("study_daily", state.getPlayer().getCurrentDay());
+        encyclopedia.discover("Преподаватели");
+        addJournalEntry("Университет", "Тимур занимался в библиотеке.", "study", 3);
         state.getPlayer().advanceTime(120);
         ConsoleUI::WaitForEnter();
         break;
@@ -2772,6 +3035,9 @@ void Game::handleStreetLocation() {
     case 5:
         ConsoleUI::RenderScreen("ПРОГУЛКА", "Ты гуляешь. Встречаешь знакомых.", {}, state.getPlayer());
         reduceStress(state.getPlayer(), 5);
+        state.getPlayer().getStats().anxiety -= state.getPlayer().scaleGain(2);
+        habits.recordDay("walk_evening", state.getPlayer().getCurrentDay());
+        addJournalEntry("Улица", "Тимур вышел на прогулку.", "event", 2);
         state.getPlayer().advanceTime(30);
         ConsoleUI::WaitForEnter();
         break;
@@ -2811,6 +3077,8 @@ void Game::handleCanteenLocation() {
             spendMoney(state.getPlayer(), 150);
             gainHunger(state.getPlayer(), 50);
             gainEnergy(state.getPlayer(), 15);
+            habits.recordDay("no_junk", state.getPlayer().getCurrentDay());
+            addJournalEntry("Столовая", "Тимур нормально пообедал.", "health", 2);
 
             ConsoleUI::RenderScreen(
                 "ОБЕД",
@@ -2840,6 +3108,7 @@ void Game::handleCanteenLocation() {
             spendMoney(state.getPlayer(), 50);
             gainHunger(state.getPlayer(), 20);
             gainEnergy(state.getPlayer(), 5);
+            habits.recordDay("junk_food", state.getPlayer().getCurrentDay());
 
             ConsoleUI::RenderScreen(
                 "ПЕРЕКУС",
@@ -2985,6 +3254,8 @@ void Game::handleShopLocation() {
         if (s.money >= bookCost) {
             spendMoney(state.getPlayer(), 300);
             gainIntellect(state.getPlayer(), 8);
+            state.getPlayer().getStats().confidence += state.getPlayer().scaleGain(2);
+            addJournalEntry("Магазин", "Тимур купил книгу по C++.", "study", 3);
 
             ConsoleUI::RenderScreen(
                 "ПОКУПКА",
@@ -3069,7 +3340,10 @@ void Game::handleFlowerShopLocation() {
             if (subChoice == 1) {
                 state.getPlayer().modifyRelation("Алла", 15);
                 gainRomance(state.getPlayer(), 10);
+                state.getPlayer().getStats().confidence += state.getPlayer().scaleGain(3);
                 state.getPlayer().setFlag("gave_flowers_to_alla", true);
+                encyclopedia.discover("Алла");
+                addJournalEntry("Цветочный магазин", "Тимур подарил Алле цветы.", "npc", 4);
                 ConsoleUI::RenderScreen("ЦВЕТЫ", "Алла в восторге!", {}, state.getPlayer());
             } else {
                 ConsoleUI::RenderScreen("ЦВЕТЫ", "Цветы будут стоять у тебя дома.", {}, state.getPlayer());
@@ -3086,6 +3360,9 @@ void Game::handleFlowerShopLocation() {
 // ==================== ВЗАИМОДЕЙСТВИЕ С NPC ====================
 
 void Game::interactWithAlla() {
+    encyclopedia.discover("Алла");
+    habits.recordDay("socialize", state.getPlayer().getCurrentDay());
+    addJournalEntry("Университет", "Тимур поговорил с Алла.", "npc", 3);
     ConsoleUI::PrintHeader("ОБЩЕНИЕ С АЛЛОЙ");
     ConsoleUI::ShowNPCPortrait("Алла");
     std::cout << BOX_V " " << alla->getDialog(state.getPlayer()) << "\n";
@@ -3114,11 +3391,15 @@ void Game::interactWithAlla() {
         }
     }
 
+    checkAchievements();
     state.getPlayer().advanceTime(15);
     ConsoleUI::WaitForEnter();
 }
 
 void Game::interactWithBulat() {
+    encyclopedia.discover("Булат");
+    habits.recordDay("socialize", state.getPlayer().getCurrentDay());
+    addJournalEntry("Университет", "Тимур поговорил с Булат.", "npc", 3);
     ConsoleUI::PrintHeader("ОБЩЕНИЕ С БУЛАТОМ");
     ConsoleUI::ShowNPCPortrait("Булат");
     std::cout << BOX_V " " << bulat->getDialog(state.getPlayer()) << "\n";
@@ -3140,11 +3421,15 @@ void Game::interactWithBulat() {
         std::cout << "\n" << selected.resultingText << "\n";
     }
 
+    checkAchievements();
     state.getPlayer().advanceTime(15);
     ConsoleUI::WaitForEnter();
 }
 
 void Game::interactWithSemen() {
+    encyclopedia.discover("Семён");
+    habits.recordDay("socialize", state.getPlayer().getCurrentDay());
+    addJournalEntry("Университет", "Тимур поговорил с Семён.", "npc", 3);
     ConsoleUI::PrintHeader("ОБЩЕНИЕ С СЕМЁНОМ");
     ConsoleUI::ShowNPCPortrait("Семён");
     std::cout << BOX_V " " << semen->getDialog(state.getPlayer()) << "\n";
@@ -3166,11 +3451,15 @@ void Game::interactWithSemen() {
         std::cout << "\n" << selected.resultingText << "\n";
     }
 
+    checkAchievements();
     state.getPlayer().advanceTime(15);
     ConsoleUI::WaitForEnter();
 }
 
 void Game::interactWithArtem() {
+    encyclopedia.discover("Артём");
+    habits.recordDay("socialize", state.getPlayer().getCurrentDay());
+    addJournalEntry("Университет", "Тимур поговорил с Артём.", "npc", 3);
     ConsoleUI::PrintHeader("ОБЩЕНИЕ С АРТЁМОМ");
     ConsoleUI::ShowNPCPortrait("Артём");
     std::cout << BOX_V " " << artem->getDialog(state.getPlayer()) << "\n";
@@ -3192,6 +3481,7 @@ void Game::interactWithArtem() {
         std::cout << "\n" << selected.resultingText << "\n";
     }
 
+    checkAchievements();
     state.getPlayer().advanceTime(15);
     ConsoleUI::WaitForEnter();
 }

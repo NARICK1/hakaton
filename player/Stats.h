@@ -17,6 +17,14 @@ struct Stats {
     int romance = GameConstants::START_ROMANCE;
     int health = 100;
 
+    // Скрытые психологические статы.
+    // Они не выводятся в основной HUD, но используются для достижений, привычек и концовок.
+    int confidence = 50; // уверенность
+    int burnout = 10;    // выгорание
+    int motivation = 50; // мотивация
+    int anxiety = 30;    // тревожность
+    int selfEsteem = 50; // самооценка
+
     void clampAll() {
         intellect = std::clamp(intellect, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
         energy = std::clamp(energy, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
@@ -27,6 +35,11 @@ struct Stats {
         money = std::clamp(money, 0, GameConstants::MAX_MONEY);
         romance = std::clamp(romance, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
         health = std::clamp(health, 0, GameConstants::MAX_STAT);
+        confidence = std::clamp(confidence, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
+        burnout = std::clamp(burnout, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
+        motivation = std::clamp(motivation, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
+        anxiety = std::clamp(anxiety, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
+        selfEsteem = std::clamp(selfEsteem, GameConstants::MIN_STAT, GameConstants::MAX_STAT);
     }
 
     bool isAlive() const {

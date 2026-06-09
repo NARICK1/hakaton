@@ -5,6 +5,10 @@
 #include "../exams/Exam.h"
 #include "../save/SaveManager.h"
 #include "../data/Difficulty.h"
+#include "../systems/Achievements.h"
+#include "../systems/EventJournal.h"
+#include "../systems/Encyclopedia.h"
+#include "../systems/Habits.h"
 #include <memory>
 #include <map>
 #include <string>
@@ -17,6 +21,10 @@ private:
     std::unique_ptr<Semen> semen;
     std::unique_ptr<Artem> artem;
     RandomEventManager eventManager;
+    AchievementSystem achievements;
+    EventJournal journal;
+    Encyclopedia encyclopedia;
+    HabitSystem habits;
     bool running = true;
 
     void initGame();
@@ -70,6 +78,15 @@ private:
     // Системы
     void applyDailySystems();
     void checkGameOver();
+    void checkAchievements();
+    void showAchievements();
+    void showJournal();
+    void showEncyclopedia();
+    void showHabits();
+    void addJournalEntry(const std::string& location,
+                         const std::string& description,
+                         const std::string& category = "story",
+                         int importance = 3);
 
 public:
     Game();

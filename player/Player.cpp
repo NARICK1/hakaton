@@ -46,6 +46,9 @@ void Player::nextDay() {
     // За день копится усталость и стресс
     stats.fatigue += scalePenalty(5);
     stats.stress += scalePenalty(3);
+    stats.burnout += scalePenalty(2);
+    stats.motivation -= scalePenalty(1);
+    stats.anxiety += scalePenalty(1);
 
     stats.clampAll();
 }
@@ -68,6 +71,7 @@ void Player::advanceTime(int minutes) {
 
     // За каждый полный час растёт усталость
     stats.fatigue += scalePenalty(minutes / 60);
+    stats.anxiety += scalePenalty(minutes / 120);
 
     stats.clampAll();
 }
@@ -192,7 +196,12 @@ std::string Player::serialize() const {
         << stats.humanity << " "
         << stats.money << " "
         << stats.romance << " "
-        << stats.health << "\n"
+        << stats.health << " "
+        << stats.confidence << " "
+        << stats.burnout << " "
+        << stats.motivation << " "
+        << stats.anxiety << " "
+        << stats.selfEsteem << "\n"
         << currentDay << " "
         << currentHour << " "
         << currentMinute << "\n"
@@ -239,16 +248,40 @@ bool Player::deserialize(const std::string& data) {
         return false;
     }
 
-    if (!(iss >> stats.intellect
-              >> stats.energy
-              >> stats.fatigue
-              >> stats.hunger
-              >> stats.stress
-              >> stats.humanity
-              >> stats.money
-              >> stats.romance
-              >> stats.health)) {
+    std::string statsLine;
+    if (!std::getline(iss, statsLine)) {
         return false;
+    }
+
+    if (statsLine.empty() && !std::getline(iss, statsLine)) {
+        return false;
+    }
+
+    std::istringstream statsStream(statsLine);
+    if (!(statsStream >> stats.intellect
+                    >> stats.energy
+                    >> stats.fatigue
+                    >> stats.hunger
+                    >> stats.stress
+                    >> stats.humanity
+                    >> stats.money
+                    >> stats.romance
+                    >> stats.health)) {
+        return false;
+    }
+
+    if (!(statsStream >> stats.confidence
+                    >> stats.burnout
+                    >> stats.motivation
+                    >> stats.anxiety
+                    >> stats.selfEsteem)) {
+        // Старые сохранения содержали только 9 обычных статов.
+        // Для них скрытые статы оставляем дефолтными.
+        stats.confidence = 50;
+        stats.burnout = 10;
+        stats.motivation = 50;
+        stats.anxiety = 30;
+        stats.selfEsteem = 50;
     }
 
     int locInt;

@@ -501,11 +501,13 @@ std::string ConsoleUI::AutoRightPanel(const Player& player,
 
 // ---- Legacy wrappers ----
 
-void ConsoleUI::PrintSeparator() {
+void ConsoleUI::PrintSeparator(const std::string& deco) {
+    (void)deco;
     std::cout << BOX_L << std::string(UIModeManager::screenW(), BOX_H[0]) << BOX_R "\n";
 }
 
-void ConsoleUI::PrintHeader(const std::string& title) {
+void ConsoleUI::PrintHeader(const std::string& title, const std::string& deco) {
+    (void)deco;
     int totalW = UIModeManager::screenW();
     std::string t = " " + title + " ";
     int tPad = (totalW - static_cast<int>(visLen(t))) / 2;

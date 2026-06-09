@@ -11,6 +11,10 @@ private:
     int currentDay = 1;
     bool gameStarted = false;
     std::string npcMemoryData; // serialized NPC memory for save/load
+    std::string journalData;
+    std::string encyclopediaData;
+    std::string achievementsData;
+    std::string habitsData;
 
 public:
     GameState() = default;
@@ -28,6 +32,18 @@ public:
     void setGameStarted(bool started) { gameStarted = started; }
     const std::string& getNPCMemoryData() const { return npcMemoryData; }
     void setNPCMemoryData(const std::string& data) { npcMemoryData = data; }
+
+    const std::string& getJournalData() const { return journalData; }
+    void setJournalData(const std::string& data) { journalData = data; }
+
+    const std::string& getEncyclopediaData() const { return encyclopediaData; }
+    void setEncyclopediaData(const std::string& data) { encyclopediaData = data; }
+
+    const std::string& getAchievementsData() const { return achievementsData; }
+    void setAchievementsData(const std::string& data) { achievementsData = data; }
+
+    const std::string& getHabitsData() const { return habitsData; }
+    void setHabitsData(const std::string& data) { habitsData = data; }
 
     // Сериализация
     std::string serialize() const;
